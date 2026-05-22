@@ -25,9 +25,15 @@
 
 - **平台定位**：双边市场。供给方（LLM 供应商 / Skill+MCP+Agent 开发者）托管 AI 能力，消费方（终端用户）按需调用，平台从每次调用中抽佣。
 - **资产体系**：三种资产
-  - `flux`（能量通量，原"信用分"）— 加密充值后按当时汇率折算获得，能力调用从此扣费。代币化时为 $FLUX
+  - `credits`（内部命名）— 加密充值后按当时汇率折算获得，能力调用从此扣费
   - `balance`（钱包余额，USDT 计价）— 可提现回加密链
-  - `karma`（业力，原"积分"）— 每次能力调用消费方+供给方各获得一份，未来用于兑换代币/质押。代币化时为 $KARMA
+  - `points`（内部命名）— 每次能力调用消费方+供给方各获得一份，未来用于兑换代币/质押
+
+**对外品牌名**（仅用于 UI 文案、白皮书、代币命名，不出现在代码/数据库/API 字段中）：
+
+- `credits` → **Flux**（代币化时为 $FLUX）
+- `points` → **Karma**（代币化时为 $KARMA）
+- `balance` → **Balance**（USDT 钱包）
 - **充值通道**：BNB Smart Chain、Base、TON 三条链，每用户每条链一个独立充值地址（HD 钱包派生）
 
 ### 1.3 决策回顾
@@ -81,7 +87,7 @@
 | **catalog** | 能力上架/审核/版本/分类（LLM / MCP / Agent / Skill 共享生命周期） |
 | **market** | 订单、购买、评价 |
 | **wallet** | 加密钱包：充值地址生成、链上监听、提现签名广播 |
-| **billing** | 复式记账：账户、流水、flux/balance/karma 三资产、分账 |
+| **billing** | 复式记账：账户、流水、credits/balance/points 三资产、分账 |
 | **pricing** | 定价策略：按 token / 按调用 / 订阅 |
 | **usage** | 跨能力类型的统一用量记录与统计 |
 | **gateway** | LLM / MCP / Agent 三种运行时代理 |
@@ -154,10 +160,10 @@ server/
 │   │   │   ├── billing.go                  IBilling 实现入口
 │   │   │   ├── account.go                  账户管理（accounts 表 CRUD）
 │   │   │   ├── transaction.go              复式记账写入
-│   │   │   ├── flux.go                     充值入账（flux 增发）
-│   │   │   ├── exchange.go                 flux → balance 兑换
-│   │   │   ├── consume.go                  能力调用扣费 + 分账 + 发 karma
-│   │   │   └── settlement.go               供给方收入划账（flux → balance）
+│   │   │   ├── credits.go                  充值入账（credits 增发）
+│   │   │   ├── exchange.go                 credits → balance 兑换
+│   │   │   ├── consume.go                  能力调用扣费 + 分账 + 发 points
+│   │   │   └── settlement.go               供给方收入划账（credits → balance）
 │   │   ├── pricing/
 │   │   │   ├── pricing.go
 │   │   │   ├── strategy_token.go
@@ -194,7 +200,7 @@ server/
 │   │   │   ├── catalog/                    上架/审核/浏览
 │   │   │   ├── market/                     下单/购买/评价
 │   │   │   ├── wallet/                     充值地址/链上记录/发起提现
-│   │   │   ├── billing/                    账户/兑换/流水/karma
+│   │   │   ├── billing/                    账户/兑换/流水/points
 │   │   │   └── usage/                      用量查询
 │   │   └── gateway/                        挂 gateway server :8081
 │   │       ├── llm/                        /v1/chat/completions 等 OpenAI 兼容
@@ -348,7 +354,7 @@ api_keys (
     user_id       BIGINT NOT NULL REFERENCES users(id),
     key_hash      TEXT UNIQUE NOT NULL,
     name          TEXT,
-    quota_flux   BIGINT,                             -- 单 key 配额上限，按 flux 计（NULL 不限）
+    quota_credits BIGINT,                            -- 单 key 配额上限（NULL 不限）
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     revoked_at    TIMESTAMPTZ
 )
@@ -394,7 +400,7 @@ orders (
     buyer_user_id  BIGINT NOT NULL REFERENCES users(id),
     item_id        BIGINT NOT NULL REFERENCES catalog_items(id),
     plan_type      TEXT NOT NULL,        -- one_off | subscription | package
-    amount_flux    BIGINT NOT NULL,
+    amount_credits BIGINT NOT NULL,
     status         TEXT NOT NULL,        -- pending | paid | refunded | cancelled
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )
@@ -461,7 +467,7 @@ accounts (
     id            BIGSERIAL PRIMARY KEY,
     owner_type    TEXT NOT NULL,           -- user | platform
     owner_id      BIGINT NOT NULL,         -- user_id 或平台账户编号
-    asset         TEXT NOT NULL,           -- flux | balance | karma
+    asset         TEXT NOT NULL,           -- credits | balance | points
     balance_micro BIGINT NOT NULL DEFAULT 0,
     version       BIGINT NOT NULL DEFAULT 0,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -470,7 +476,7 @@ accounts (
 
 transactions (
     id         BIGSERIAL PRIMARY KEY,
-    tx_type    TEXT NOT NULL,              -- deposit_flux | exchange | consume | settle | withdraw | karma_grant
+    tx_type    TEXT NOT NULL,              -- deposit_credits | exchange | consume | settle | withdraw | points_grant
     ref_type   TEXT,                       -- chain_deposit | order | usage_record | withdraw_request
     ref_id     BIGINT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -488,14 +494,14 @@ transaction_entries (
 **复式记账约束**：
 
 - **守恒型 tx**（`exchange` / `consume` / `settle` / `withdraw`）：entries 按 asset 分组后 SUM(delta) 必须为 0。
-- **发行型 tx**（`deposit_flux` / `karma_grant`）：单边发行，不强制 SUM=0。由 `tx_type` 显式区分；写入逻辑里按类型走不同的校验。
+- **发行型 tx**（`deposit_credits` / `points_grant`）：单边发行，不强制 SUM=0。由 `tx_type` 显式区分；写入逻辑里按类型走不同的校验。
 
 测试不变量：所有 accounts 的 balance_micro 按 asset 求和 = SUM(发行型 tx delta) - SUM(销毁型 tx delta)（销毁型本设计暂无）。
 
 **典型账户**：
 
-- 用户：(user, user_id, flux) / (user, user_id, balance) / (user, user_id, karma)
-- 平台：(platform, 1, flux)（佣金池/手续费）/ (platform, 1, balance)（提现汇集）/ (platform, 1, karma)（总池）
+- 用户：(user, user_id, credits) / (user, user_id, balance) / (user, user_id, points)
+- 平台：(platform, 1, credits)（佣金池/手续费）/ (platform, 1, balance)（提现汇集）/ (platform, 1, points)（总池）
 
 ### 5.6 pricing
 
@@ -533,11 +539,11 @@ usage_records (
     output_tokens            INT NOT NULL DEFAULT 0,
     call_count               INT NOT NULL DEFAULT 1,
     latency_ms               INT NOT NULL DEFAULT 0,
-    cost_flux             BIGINT NOT NULL,          -- 用户实际扣的 flux
-    commission_flux       BIGINT NOT NULL,          -- 平台佣金（flux）
-    provider_revenue_flux BIGINT NOT NULL,          -- 供给方收入（flux）
-    karma_to_consumer     BIGINT NOT NULL DEFAULT 0,
-    karma_to_provider     BIGINT NOT NULL DEFAULT 0,
+    cost_credits             BIGINT NOT NULL,          -- 用户实际扣的 credits
+    commission_credits       BIGINT NOT NULL,          -- 平台佣金
+    provider_revenue_credits BIGINT NOT NULL,          -- 供给方收入
+    points_to_consumer       BIGINT NOT NULL DEFAULT 0,
+    points_to_provider       BIGINT NOT NULL DEFAULT 0,
     request_id               TEXT,
     channel_id               BIGINT,
     ip                       TEXT,
@@ -587,11 +593,11 @@ upstream_channels (
    - 等达到确认阈值 → status=confirmed
    - logic/wallet/rate.go 查当时汇率（如 1 BNB = 600 USD）
    - chain_deposits.amount_usd_at_time = 300_000_000 micro-USD
-   - 调 service.Billing().DepositFlux({user_id, flux=300_000_000, ref_type=chain_deposit, ref_id=...})
-   → logic/billing/flux.go 单事务内：
-     - upsert accounts(user, uid, flux)
-     - INSERT transactions(tx_type='deposit_flux', ref_type, ref_id)
-     - INSERT transaction_entries(+300_000_000 to user.flux account)
+   - 调 service.Billing().DepositCredits({user_id, credits=300_000_000, ref_type=chain_deposit, ref_id=...})
+   → logic/billing/credits.go 单事务内：
+     - upsert accounts(user, uid, credits)
+     - INSERT transactions(tx_type='deposit_credits', ref_type, ref_id)
+     - INSERT transaction_entries(+300_000_000 to user.credits account)
      - UPDATE chain_deposits.status='credited'
 ```
 
@@ -609,47 +615,47 @@ upstream_channels (
 4. logic/gateway/llm/llm.go:
    a) service.Catalog().GetItem(ctx, item_id)
    b) service.Pricing().PreCalc(ctx, {item_id, est_tokens=4000})
-      → est_cost_flux = 12_000_000
-   c) service.Billing().Consume(ctx, {mode=reserve, user_id, item_id, flux=12_000_000})
-      → 检查 user.flux 余额，预扣（事务+乐观锁），返回 reservation_id
+      → est_cost_credits = 12_000_000
+   c) service.Billing().Consume(ctx, {mode=reserve, user_id, item_id, credits=12_000_000})
+      → 检查 user.credits 余额，预扣（事务+乐观锁），返回 reservation_id
    d) logic/gateway/channel/channel.go: Pick(item) 选 upstream_channels 中的一个
    e) 调上游 LLM API，拿到 response 和实际 tokens
    f) service.Pricing().FinalCalc(ctx, {item_id, actual_tokens})
       → actual_cost = 10_500_000
       → commission = actual_cost * commission_rate
       → provider_revenue = actual_cost - commission
-      → karma_to_consumer / karma_to_provider 按规则计算
+      → points_to_consumer / points_to_provider 按规则计算
    g) 单事务内顺序写入（usage_record 先于 transactions 以便 ref 引用）：
       - INSERT usage_records(...) → 拿到 usage_record_id
       - service.Billing().Consume(ctx, {mode=settle, reservation_id, actual_cost,
                                          commission, provider_revenue,
-                                         karma_to_consumer, karma_to_provider,
+                                         points_to_consumer, points_to_provider,
                                          ref_type='usage_record', ref_id=usage_record_id})
         → INSERT transactions(tx_type='consume', ref_type='usage_record', ref_id)
-        → entries (flux，守恒型 SUM=0)：
-          * -actual_cost from user.flux
-          * +commission to platform.flux
-          * +provider_revenue to provider.flux
-        → 退还预扣差额 (12_000_000 - 10_500_000) 给 user.flux（同一 tx 或独立 tx，plan 阶段定）
-        → INSERT transactions(tx_type='karma_grant', ref_type='usage_record', ref_id)
-        → entries (karma，发行型)：
-          * +karma_to_consumer to user.karma
-          * +karma_to_provider to provider.karma
+        → entries (credits，守恒型 SUM=0)：
+          * -actual_cost from user.credits
+          * +commission to platform.credits
+          * +provider_revenue to provider.credits
+        → 退还预扣差额 (12_000_000 - 10_500_000) 给 user.credits（同一 tx 或独立 tx，plan 阶段定）
+        → INSERT transactions(tx_type='points_grant', ref_type='usage_record', ref_id)
+        → entries (points，发行型)：
+          * +points_to_consumer to user.points
+          * +points_to_provider to provider.points
    h) （usage 聚合统计的批量异步处理由 cmd/recorder 进程消费 PG NOTIFY，不阻塞本调用）
    i) 返回 response
 ```
 
-### 6.3 flux → balance 兑换
+### 6.3 credits → balance 兑换
 
 ```
-POST /api/v1/billing/exchange {flux: 50_000_000}
-→ service.Billing().ExchangeFluxToBalance(uid, 50_000_000)
+POST /api/v1/billing/exchange {credits: 50_000_000}
+→ service.Billing().ExchangeCreditsToBalance(uid, 50_000_000)
 → logic/billing/exchange.go：
-  - 查 exchange_rates(flux→balance) 最近 effective 记录（如 rate=0.95×10^6, fee=0）
+  - 查 exchange_rates(credits→balance) 最近 effective 记录（如 rate=0.95×10^6, fee=0）
   - 单事务：
     - INSERT transactions(tx_type='exchange')
     - entries:
-      * -50_000_000 from user.flux
+      * -50_000_000 from user.credits
       * +47_500_000 to user.balance
       * +2_500_000 to platform.fee（手续费汇集账户）
 ```
@@ -659,12 +665,12 @@ POST /api/v1/billing/exchange {flux: 50_000_000}
 ```
 cmd/settlement 进程，worker/settlement/settlement.go 注册 gcron 每日任务：
 
-1. 遍历所有 owner_type=provider 的 provider.flux 账户
+1. 遍历所有 owner_type=provider 的 provider.credits 账户
 2. service.Billing().SettleProviderRevenue(ctx, provider_id)
 → logic/billing/settlement.go：
    - 单事务：
      - INSERT transactions(tx_type='settle')
-     - -X from provider.flux
+     - -X from provider.credits
      - +X to provider.balance
 ```
 
@@ -912,8 +918,8 @@ settlement:
 - **端到端**：
   - `:8080/api/v1/auth/register` → 登陆 → 创建 API key
   - `:8081/v1/chat/completions` 用真实/mock 上游跑一次，验证 `usage_records` 与 `transaction_entries` 一致
-  - 充值流程：在 mock chain watcher 上注入 deposit event，验证 flux 入账
-- **金额不变量测试**：随机化生成 N 笔混合 tx，最后断言每个 asset 的所有 accounts.balance_micro 之和 == 该 asset 净发行量（flux 发行总和 - 销毁；balance/karma 类同）
+  - 充值流程：在 mock chain watcher 上注入 deposit event，验证 credits 入账
+- **金额不变量测试**：随机化生成 N 笔混合 tx，最后断言每个 asset 的所有 accounts.balance_micro 之和 == 该 asset 净发行量（credits 发行总和 - 销毁；balance/points 类同）
 
 ## 11. 范围外（本次不做）
 
@@ -929,6 +935,6 @@ settlement:
 
 - **复式记账实现复杂度**：需要严格事务 + 乐观锁，预扣/结算/退款边界容易出错。缓解：每个金额相关测试都验证 SUM=0 不变量。
 - **HD 钱包安全**：主助记词泄漏 = 全用户充值地址私钥泄漏。缓解：助记词只在环境变量里，watcher/withdraw 进程隔离部署，未来引入 HSM/KMS。
-- **链上 reorg**：观察到的 deposit 在确认数内可能被回滚。缓解：等足够 confirmations 后再写入 flux。
+- **链上 reorg**：观察到的 deposit 在确认数内可能被回滚。缓解：等足够 confirmations 后再写入 credits。
 - **跨进程 usage 写入一致**：§7.4 已明确 API 进程直接同步写入 usage_records（与 billing transaction 同一事务），recorder 进程只做聚合/归档，不存在丢数据风险。
 - **一次性大改风险**：中间 commit 可能某些功能短暂不可用。缓解：早期项目无生产流量，可接受；每个 commit 保持可编译。
