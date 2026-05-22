@@ -40,3 +40,6 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Claude Code worktrees / local state
+.claude/
