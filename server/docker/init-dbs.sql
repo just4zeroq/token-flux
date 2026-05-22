@@ -1,4 +1,0 @@
-CREATE DATABASE user_svc;
-CREATE DATABASE asset_svc;
-CREATE DATABASE market_svc;
-CREATE DATABASE ai_gateway;
