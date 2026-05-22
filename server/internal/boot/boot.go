@@ -16,18 +16,27 @@ func RunAPI() {
 	ctx := gctx.New()
 
 	apiSrv := g.Server("api")
+	apiSrv.SetAddr(":8080")
 	apiSrv.Group("/", func(group *ghttp.RouterGroup) {
 		group.Middleware(middleware.Recover, middleware.RequestID, middleware.CORS)
 		group.GET("/health", health)
 	})
 
 	gwSrv := g.Server("gateway")
+	gwSrv.SetAddr(":8081")
 	gwSrv.Group("/", func(group *ghttp.RouterGroup) {
 		group.Middleware(middleware.Recover, middleware.RequestID, middleware.CORS)
 		group.GET("/health", health)
 	})
 
-	g.Log().Info(ctx, "ai-platform starting: api :8080 + gateway :8081")
+	if err := apiSrv.Start(); err != nil {
+		g.Log().Fatalf(ctx, "api server start failed: %v", err)
+	}
+	if err := gwSrv.Start(); err != nil {
+		g.Log().Fatalf(ctx, "gateway server start failed: %v", err)
+	}
+
+	g.Log().Info(ctx, "ai-platform started: api :8080 + gateway :8081")
 	g.Wait()
 }
 
