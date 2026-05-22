@@ -531,18 +531,3 @@ git commit -m "feat(migrations): identity + catalog + market tables"
 
 ---
 
----
-
-## TASKS 6-12: NOT YET WRITTEN
-
-This plan stops after Task 5. Tasks 6-12 will be authored after Tasks 1-5 are executed and the basic skeleton is verified to build, since execution will surface concrete decisions (e.g. whether `gf gen dao` runs cleanly against the schemas in Task 5).
-
-**Remaining scope to be planned later:**
-
-- Task 6: migrations for `wallet` (deposit_addresses, chain_deposits, withdraw_requests), `billing` (accounts, transactions, transaction_entries), `pricing` (pricing_rules, exchange_rates), `usage` (usage_records), `gateway` (upstream_channels)
-- Task 7: `internal/middleware/common.go` (CORS / Recover / RequestID) and `internal/boot/boot.go` (two `ghttp.Server` setup with `/health`)
-- Task 8: 10 `internal/service/*.go` interface files (IIdentity, ICatalog, IMarket, IWallet, IBilling, IPricing, IUsage, ILLMRuntime, IMCPRuntime, IAgentRuntime) with `RegisterXxx` / `Xxx()` accessors
-- Task 9: 8 `internal/logic/<domain>/<domain>.go` empty stubs with `init() { service.RegisterXxx(New()) }`, plus `internal/logic/logic.go` blank-imports aggregator, plus `internal/logic/gateway/gateway.go` aggregator for llm/mcp/agent
-- Task 10: `cmd/api/main.go` + placeholder `cmd/{watcher,recorder,settlement}/main.go`
-- Task 11: Verification — `go build ./...`, run goose migrations against a fresh `ai_platform` database, `go run ./cmd/api`, `curl :8080/health` and `curl :8081/health`
-- Task 12: Spec self-review against the design doc, final commit summary
