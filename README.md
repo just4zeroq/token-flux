@@ -1,6 +1,10 @@
-# AI Platform
+# Token Flux
 
-AI capability platform monorepo — 5 Go microservices, React SPA, and Tauri desktop app.
+AI 能力交易市场 —— 连接模型提供商与消费者的开放平台。
+
+**核心价值：** Token (API Key) 在传统模式下各自绑定单一厂商和计费体系。Token Flux 将 Key 抽象为统一虚拟 Key，消费者只需一个 Key 即可访问多家 LLM 服务；Provider 可以托管自己的 API Key 或部署自托管网关，通过市场机制按服务质量、价格和信誉竞争流量，平台负责路由、计费、结算和纠纷仲裁。让 AI 能力像商品一样自由流通。
+
+---
 
 ## Architecture
 

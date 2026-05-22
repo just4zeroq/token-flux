@@ -1,8 +1,0 @@
-
-# CLI tool, only in development environment.
-# https://goframe.org/docs/cli
-gfcli:
-  gen:
-    dao:
-      - link: "pgsql:aiplatform:aiplatform@tcp(127.0.0.1:5432)/user_svc"
-        descriptionTag: true
