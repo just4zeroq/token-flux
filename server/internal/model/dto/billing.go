@@ -28,19 +28,19 @@ type TransactionEntryInfo struct {
 }
 
 type CreditAccountIn struct {
-	OwnerType   string `json:"owner_type" v:"required"`
-	OwnerID     int64  `json:"owner_id" v:"required"`
 	Asset       string `json:"asset" v:"required"`
 	AmountMicro int64  `json:"amount_micro" v:"required|min:1"`
+	OwnerType   string `json:"-"`
+	OwnerID     int64  `json:"-"`
 	RefType     string `json:"ref_type"`
 	RefID       int64  `json:"ref_id"`
 }
 
 type DebitAccountIn struct {
-	OwnerType   string `json:"owner_type" v:"required"`
-	OwnerID     int64  `json:"owner_id" v:"required"`
 	Asset       string `json:"asset" v:"required"`
 	AmountMicro int64  `json:"amount_micro" v:"required|min:1"`
+	OwnerType   string `json:"-"`
+	OwnerID     int64  `json:"-"`
 	RefType     string `json:"ref_type"`
 	RefID       int64  `json:"ref_id"`
 }

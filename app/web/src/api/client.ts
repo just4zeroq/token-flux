@@ -25,3 +25,14 @@ export async function apiGet<T>(path: string, token: string): Promise<T> {
   }
   return res.json()
 }
+
+export async function apiDel(path: string, token: string): Promise<void> {
+  const res = await fetch(`${API_BASE}${path}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  })
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ message: res.statusText }))
+    throw new Error(err.message || 'request failed')
+  }
+}

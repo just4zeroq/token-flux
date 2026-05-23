@@ -6,6 +6,7 @@ import (
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/os/gctx"
 
+	"ai-platform/internal/controller/api/admin"
 	"ai-platform/internal/controller/api/billing"
 	"ai-platform/internal/controller/api/catalog"
 	"ai-platform/internal/controller/api/gateway"
@@ -13,6 +14,7 @@ import (
 	"ai-platform/internal/controller/api/market"
 	"ai-platform/internal/controller/api/pricing"
 	"ai-platform/internal/controller/api/usage"
+	"ai-platform/internal/controller/api/wallet"
 	"ai-platform/internal/middleware"
 )
 
@@ -78,6 +80,25 @@ func RunAPI() {
 				bg.GET("/transactions", billing.ListTransactions)
 				bg.POST("/credit", billing.CreditAccount)
 				bg.POST("/debit", billing.DebitAccount)
+			})
+
+			// Wallet routes (JWT required)
+			v1.Group("/wallet", func(wg *ghttp.RouterGroup) {
+				wg.Middleware(middleware.JWTAuth)
+				wg.POST("/deposit-address", wallet.CreateDepositAddress)
+				wg.GET("/deposit-addresses", wallet.ListDepositAddresses)
+				wg.GET("/deposits", wallet.ListDeposits)
+				wg.POST("/withdraw", wallet.CreateWithdraw)
+				wg.GET("/withdrawals", wallet.ListWithdrawals)
+			})
+
+			// Admin routes (JWT + AdminAuth required)
+			v1.Group("/admin", func(ag *ghttp.RouterGroup) {
+				ag.Middleware(middleware.JWTAuth, middleware.AdminAuth)
+				ag.GET("/users", admin.ListUsers)
+				ag.GET("/users/:id", admin.GetUser)
+				ag.PUT("/users/:id/status", admin.UpdateUserStatus)
+				ag.GET("/stats", admin.GetStats)
 			})
 
 			// Gateway routes (upstream channels)

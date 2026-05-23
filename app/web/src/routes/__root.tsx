@@ -32,7 +32,9 @@ function RootLayout() {
               <a href="/dashboard" className="text-muted-foreground hover:text-foreground">Dashboard</a>
               <a href="/keys" className="text-muted-foreground hover:text-foreground">API Keys</a>
               <a href="/models" className="text-muted-foreground hover:text-foreground">Models</a>
+              <a href="/usage" className="text-muted-foreground hover:text-foreground">Usage</a>
               <a href="/orders" className="text-muted-foreground hover:text-foreground">Orders</a>
+              <a href="/transactions" className="text-muted-foreground hover:text-foreground">Transactions</a>
             </nav>
           </div>
           <div className="flex items-center gap-3 text-sm">

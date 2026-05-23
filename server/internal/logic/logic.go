@@ -6,6 +6,7 @@
 package logic
 
 import (
+	_ "ai-platform/internal/logic/admin"
 	_ "ai-platform/internal/logic/billing"
 	_ "ai-platform/internal/logic/catalog"
 	_ "ai-platform/internal/logic/gateway"

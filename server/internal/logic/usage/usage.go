@@ -21,7 +21,7 @@ func New() *sUsage { return &sUsage{} }
 func (s *sUsage) ReportUsage(ctx context.Context, in dto.ReportUsageIn) (*dto.UsageRecordInfo, error) {
 	id, err := g.DB().Model("usage_records").Ctx(ctx).InsertAndGetId(g.Map{
 		"user_id":         in.UserID,
-		"api_key_id":      in.ApiKeyID,
+		// api_key_id omitted when 0 to avoid FK violation
 		"item_id":         in.ItemID,
 		"runtime":         in.Runtime,
 		"input_tokens":    in.InputTokens,

@@ -8,10 +8,10 @@ export const Route = createFileRoute('/login')({
 
 function LoginPage() {
   const [mode, setMode] = useState<'login' | 'register'>('login')
-  const [username, setUsername] = useState('')
-  const [password, setPassword] = useState('')
   const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
+  const [message, setMessage] = useState('')
   const login = useAuthStore((s) => s.login)
   const register = useAuthStore((s) => s.register)
   const loading = useAuthStore((s) => s.loading)
@@ -20,13 +20,17 @@ function LoginPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError('')
+    setMessage('')
     try {
       if (mode === 'login') {
-        await login(username, password)
+        await login(email, password)
+        navigate({ to: '/dashboard' })
       } else {
-        await register(username, password, email)
+        await register(email, password)
+        setMessage('Registration successful! Please sign in.')
+        setMode('login')
+        setPassword('')
       }
-      navigate({ to: '/dashboard' })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred')
     }
@@ -44,28 +48,16 @@ function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Username</label>
+            <label className="block text-sm font-medium mb-1">Email</label>
             <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               className="w-full border rounded-md px-3 py-2 text-sm"
-              placeholder="Enter username"
+              placeholder="Enter email"
               required
             />
           </div>
-          {mode === 'register' && (
-            <div>
-              <label className="block text-sm font-medium mb-1">Email</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full border rounded-md px-3 py-2 text-sm"
-                placeholder="Enter email"
-              />
-            </div>
-          )}
           <div>
             <label className="block text-sm font-medium mb-1">Password</label>
             <input
@@ -79,6 +71,7 @@ function LoginPage() {
           </div>
 
           {error && <p className="text-red-500 text-sm">{error}</p>}
+          {message && <p className="text-green-600 text-sm">{message}</p>}
 
           <button
             type="submit"

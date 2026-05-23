@@ -7,25 +7,42 @@ export const Route = createFileRoute('/dashboard')({
   component: DashboardPage,
 })
 
-interface Balance {
-  balance: number
-  total_recharged: number
-  total_consumed: number
+interface AccountInfo {
+  owner_type: string
+  owner_id: number
+  asset: string
+  balance_micro: number
+}
+
+interface UsageStats {
+  total_calls: number
+  total_tokens: number
+  total_credits: number
+  avg_latency_ms: number
 }
 
 function DashboardPage() {
   const token = useAuthStore((s) => s.token)
   const user = useAuthStore((s) => s.user)
-  const [balance, setBalance] = useState<Balance | null>(null)
+  const [account, setAccount] = useState<AccountInfo | null>(null)
+  const [stats, setStats] = useState<UsageStats | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!token) return
-    apiGet<{ balance: Balance }>('/asset/balance', token)
-      .then((res) => setBalance(res.balance))
+    Promise.all([
+      apiGet<AccountInfo>('/billing/balance', token),
+      apiGet<UsageStats>('/usage/stats', token),
+    ])
+      .then(([acc, st]) => {
+        setAccount(acc)
+        setStats(st)
+      })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [token])
+
+  const balance = account ? (account.balance_micro / 1_000_000).toFixed(2) : '0.00'
 
   return (
     <div className="p-6 space-y-6">
@@ -35,26 +52,40 @@ function DashboardPage() {
         <div className="border rounded-lg p-4">
           <p className="text-sm text-muted-foreground">Balance</p>
           <p className="text-2xl font-bold">
-            {loading ? '...' : balance ? balance.balance.toFixed(2) : '0.00'}
+            {loading ? '...' : `${balance} ${account?.asset || ''}`}
           </p>
         </div>
         <div className="border rounded-lg p-4">
-          <p className="text-sm text-muted-foreground">Total Recharged</p>
+          <p className="text-sm text-muted-foreground">Total Calls</p>
           <p className="text-2xl font-bold">
-            {loading ? '...' : balance ? balance.total_recharged.toFixed(2) : '0.00'}
+            {loading ? '...' : stats?.total_calls?.toLocaleString() ?? '0'}
           </p>
         </div>
         <div className="border rounded-lg p-4">
-          <p className="text-sm text-muted-foreground">Total Consumed</p>
+          <p className="text-sm text-muted-foreground">Total Tokens</p>
           <p className="text-2xl font-bold">
-            {loading ? '...' : balance ? balance.total_consumed.toFixed(2) : '0.00'}
+            {loading ? '...' : stats?.total_tokens?.toLocaleString() ?? '0'}
           </p>
         </div>
       </div>
 
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="border rounded-lg p-4">
+            <p className="text-sm text-muted-foreground">Total Credits</p>
+            <p className="text-2xl font-bold">{stats.total_credits.toFixed(2)}</p>
+          </div>
+          <div className="border rounded-lg p-4">
+            <p className="text-sm text-muted-foreground">Avg Latency</p>
+            <p className="text-2xl font-bold">{stats.avg_latency_ms.toFixed(0)} ms</p>
+          </div>
+        </div>
+      )}
+
       <div className="border rounded-lg p-4">
         <h2 className="font-semibold mb-2">Account Info</h2>
         <p className="text-sm text-muted-foreground">Username: {user?.username}</p>
+        <p className="text-sm text-muted-foreground">Email: {user?.email}</p>
         <p className="text-sm text-muted-foreground">User ID: {user?.id}</p>
       </div>
     </div>

@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router'
 import { useEffect, useState } from 'react'
 import { useAuthStore } from '../stores/auth'
-import { apiGet, apiPost } from '../api/client'
+import { apiGet, apiPost, apiDel } from '../api/client'
 
 export const Route = createFileRoute('/keys')({
   component: KeysPage,
@@ -13,11 +13,6 @@ interface ApiKey {
   key: string
   status: number
   created_at: string
-}
-
-interface ListKeysResponse {
-  api_keys: ApiKey[]
-  total: number
 }
 
 function KeysPage() {
@@ -32,8 +27,8 @@ function KeysPage() {
   const fetchKeys = async () => {
     if (!token) return
     try {
-      const res = await apiGet<ListKeysResponse>('/user/keys', token)
-      setKeys(res.api_keys || [])
+      const res = await apiGet<ApiKey[]>('/users/me/keys', token)
+      setKeys(res || [])
     } catch {
       // ignore
     } finally {
@@ -47,10 +42,10 @@ function KeysPage() {
     if (!token) return
     setError('')
     try {
-      const res = await apiPost<{ api_key: ApiKey; raw_key: string }>(
-        '/user/keys/create', { name: newName }, token
+      const res = await apiPost<{ id: number; key: string; name: string; status: number; created_at: string }>(
+        '/users/me/keys', { name: newName || 'Default' }, token
       )
-      setNewKey(res.raw_key)
+      setNewKey(res.key)
       setShowNew(false)
       setNewName('')
       fetchKeys()
@@ -62,7 +57,7 @@ function KeysPage() {
   const deleteKey = async (id: number) => {
     if (!token || !confirm('Delete this API key?')) return
     try {
-      await apiPost('/user/keys/delete', { id }, token)
+      await apiDel(`/users/me/keys/${id}`, token)
       fetchKeys()
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to delete key')
@@ -97,7 +92,7 @@ function KeysPage() {
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
-            placeholder="Key name (optional)"
+            placeholder="Key name"
             className="w-full border rounded-md px-3 py-2 text-sm"
           />
           <div className="flex gap-2">

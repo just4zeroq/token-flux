@@ -6,6 +6,9 @@ interface User {
   username: string
   email: string
   display_name?: string
+  avatar?: string
+  role?: string
+  kyc_status?: string
 }
 
 interface AuthState {
@@ -13,8 +16,8 @@ interface AuthState {
   user: User | null
   loading: boolean
   setAuth: (token: string, user: User) => void
-  login: (username: string, password: string) => Promise<void>
-  register: (username: string, password: string, email: string) => Promise<void>
+  login: (email: string, password: string) => Promise<void>
+  register: (email: string, password: string) => Promise<void>
   fetchProfile: () => Promise<void>
   logout: () => void
 }
@@ -29,30 +32,27 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ token, user })
   },
 
-  login: async (username, password) => {
+  login: async (email, password) => {
     set({ loading: true })
     try {
-      const res = await apiPost<{ user_id: number; username: string; token: string }>(
-        '/user/login', { username, password }
+      const res = await apiPost<{ token: string; user: User }>(
+        '/auth/login', { email, password }
       )
-      const user = { id: res.user_id, username: res.username, email: '' }
       localStorage.setItem('token', res.token)
-      set({ token: res.token, user, loading: false })
+      set({ token: res.token, user: res.user, loading: false })
     } catch (e) {
       set({ loading: false })
       throw e
     }
   },
 
-  register: async (username, password, email) => {
+  register: async (email, password) => {
     set({ loading: true })
     try {
-      const res = await apiPost<{ user_id: number; username: string; token: string }>(
-        '/user/register', { username, password, email }
+      await apiPost<{ message: string }>(
+        '/auth/register', { email, password }
       )
-      const user = { id: res.user_id, username: res.username, email: '' }
-      localStorage.setItem('token', res.token)
-      set({ token: res.token, user, loading: false })
+      set({ loading: false })
     } catch (e) {
       set({ loading: false })
       throw e
@@ -63,7 +63,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const { token } = get()
     if (!token) return
     try {
-      const user = await apiGet<User>('/user/profile', token)
+      const user = await apiGet<User>('/users/me', token)
       set({ user })
     } catch {
       localStorage.removeItem('token')
