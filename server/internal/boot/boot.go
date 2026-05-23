@@ -6,6 +6,7 @@ import (
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/os/gctx"
 
+	"ai-platform/internal/controller/api/identity"
 	"ai-platform/internal/middleware"
 )
 
@@ -20,6 +21,22 @@ func RunAPI() {
 	apiSrv.Group("/", func(group *ghttp.RouterGroup) {
 		group.Middleware(middleware.Recover, middleware.RequestID, middleware.CORS)
 		group.GET("/health", health)
+
+		// Identity routes (auth)
+		group.Group("/api/v1", func(g *ghttp.RouterGroup) {
+			g.POST("/auth/register", identity.Register)
+			g.POST("/auth/verify-email", identity.VerifyEmail)
+			g.POST("/auth/login", identity.Login)
+
+			// JWT-protected routes
+			g.Group("/users/me", func(g *ghttp.RouterGroup) {
+				g.Middleware(middleware.JWTAuth)
+				g.GET("", identity.Me)
+				g.POST("/keys", identity.CreateKey)
+				g.GET("/keys", identity.ListKeys)
+				g.DELETE("/keys/:id", identity.DeleteKey)
+			})
+		})
 	})
 
 	gwSrv := g.Server("gateway")

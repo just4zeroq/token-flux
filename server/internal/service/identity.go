@@ -1,9 +1,23 @@
 package service
 
+import (
+	"context"
+
+	"ai-platform/internal/model/dto"
+)
+
 // IIdentity is the contract for the identity domain (users, JWT, API keys).
-// Methods will be filled in during the identity migration plan; this skeleton
-// only establishes the registration mechanism.
-type IIdentity interface{}
+type IIdentity interface {
+	Register(ctx context.Context, in dto.RegisterIn) (*dto.RegisterOut, error)
+	VerifyEmail(ctx context.Context, in dto.VerifyEmailIn) (*dto.VerifyEmailOut, error)
+	Login(ctx context.Context, in dto.LoginIn) (*dto.LoginOut, error)
+	GetUser(ctx context.Context, userID int64) (*dto.UserInfo, error)
+	ValidateToken(ctx context.Context, token string) (*dto.TokenClaims, error)
+	ValidateApiKey(ctx context.Context, key string) (*dto.ApiKeyInfo, error)
+	CreateApiKey(ctx context.Context, userID int64, in dto.CreateApiKeyIn) (*dto.ApiKeyOut, error)
+	ListApiKeys(ctx context.Context, userID int64) ([]*dto.ApiKeyInfo, error)
+	DeleteApiKey(ctx context.Context, userID, keyID int64) error
+}
 
 var localIdentity IIdentity
 
