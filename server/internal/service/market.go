@@ -1,6 +1,17 @@
 package service
 
-type IMarket interface{}
+import (
+	"context"
+
+	"ai-platform/internal/model/dto"
+)
+
+type IMarket interface {
+	CreateOrder(ctx context.Context, userID int64, in dto.CreateOrderIn) (*dto.OrderInfo, error)
+	ListOrders(ctx context.Context, userID int64) ([]*dto.OrderInfo, error)
+	CreateReview(ctx context.Context, userID int64, in dto.CreateReviewIn) (*dto.ReviewInfo, error)
+	ListReviews(ctx context.Context, itemID int64) ([]*dto.ReviewInfo, error)
+}
 
 var localMarket IMarket
 

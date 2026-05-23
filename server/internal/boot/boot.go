@@ -6,7 +6,11 @@ import (
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/os/gctx"
 
+	"ai-platform/internal/controller/api/catalog"
 	"ai-platform/internal/controller/api/identity"
+	"ai-platform/internal/controller/api/market"
+	"ai-platform/internal/controller/api/pricing"
+	"ai-platform/internal/controller/api/usage"
 	"ai-platform/internal/middleware"
 )
 
@@ -23,18 +27,46 @@ func RunAPI() {
 		group.GET("/health", health)
 
 		// Identity routes (auth)
-		group.Group("/api/v1", func(g *ghttp.RouterGroup) {
-			g.POST("/auth/register", identity.Register)
-			g.POST("/auth/verify-email", identity.VerifyEmail)
-			g.POST("/auth/login", identity.Login)
+		group.Group("/api/v1", func(v1 *ghttp.RouterGroup) {
+			v1.POST("/auth/register", identity.Register)
+			v1.POST("/auth/verify-email", identity.VerifyEmail)
+			v1.POST("/auth/login", identity.Login)
 
 			// JWT-protected routes
-			g.Group("/users/me", func(g *ghttp.RouterGroup) {
-				g.Middleware(middleware.JWTAuth)
-				g.GET("", identity.Me)
-				g.POST("/keys", identity.CreateKey)
-				g.GET("/keys", identity.ListKeys)
-				g.DELETE("/keys/:id", identity.DeleteKey)
+			v1.Group("/users/me", func(me *ghttp.RouterGroup) {
+				me.Middleware(middleware.JWTAuth)
+				me.GET("/", identity.Me)
+				me.POST("/keys", identity.CreateKey)
+				me.GET("/keys", identity.ListKeys)
+				me.DELETE("/keys/:id", identity.DeleteKey)
+			})
+
+			// Catalog routes (public)
+			v1.GET("/catalog/categories", catalog.ListCategories)
+			v1.GET("/catalog/items", catalog.ListItems)
+			v1.GET("/catalog/items/:id", catalog.GetItem)
+
+			// Pricing routes
+			v1.GET("/pricing/rules", pricing.ListPricingRules)
+			v1.GET("/pricing/rules/:id", pricing.GetPricingRule)
+			v1.POST("/pricing/rules", pricing.CreatePricingRule)
+			v1.GET("/pricing/exchange-rates", pricing.ListExchangeRates)
+
+			// Usage routes (JWT required)
+			v1.Group("/usage", func(ug *ghttp.RouterGroup) {
+				ug.Middleware(middleware.JWTAuth)
+				ug.POST("/report", usage.ReportUsage)
+				ug.GET("/records", usage.ListUsage)
+				ug.GET("/stats", usage.GetUsageStats)
+			})
+
+			// Market routes
+			v1.GET("/market/reviews", market.ListReviews)
+			v1.Group("/market", func(mg *ghttp.RouterGroup) {
+				mg.Middleware(middleware.JWTAuth)
+				mg.POST("/orders", market.CreateOrder)
+				mg.GET("/orders", market.ListOrders)
+				mg.POST("/reviews", market.CreateReview)
 			})
 		})
 	})

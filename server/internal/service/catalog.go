@@ -1,6 +1,17 @@
 package service
 
-type ICatalog interface{}
+import (
+	"context"
+
+	"ai-platform/internal/model/dto"
+)
+
+// ICatalog is the contract for the catalog domain (categories, items).
+type ICatalog interface {
+	ListCategories(ctx context.Context) ([]dto.CategoryInfo, error)
+	ListItems(ctx context.Context, itemType, status string) ([]dto.ItemInfo, error)
+	GetItem(ctx context.Context, id int64) (*dto.ItemInfo, error)
+}
 
 var localCatalog ICatalog
 

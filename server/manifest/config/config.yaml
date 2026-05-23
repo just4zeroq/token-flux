@@ -9,9 +9,9 @@ database:
     type: "pgsql"
     host: "127.0.0.1"
     port: "5432"
-    user: "aiplatform"
-    pass: "aiplatform"
-    name: "ai_platform"
+    user: "postgres"
+    pass: "123456"
+    name: "flux"
     debug: false
 
 logger:
