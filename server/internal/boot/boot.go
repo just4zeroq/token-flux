@@ -6,7 +6,9 @@ import (
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/os/gctx"
 
+	"ai-platform/internal/controller/api/billing"
 	"ai-platform/internal/controller/api/catalog"
+	"ai-platform/internal/controller/api/gateway"
 	"ai-platform/internal/controller/api/identity"
 	"ai-platform/internal/controller/api/market"
 	"ai-platform/internal/controller/api/pricing"
@@ -68,6 +70,21 @@ func RunAPI() {
 				mg.GET("/orders", market.ListOrders)
 				mg.POST("/reviews", market.CreateReview)
 			})
+
+			// Billing routes (JWT required)
+			v1.Group("/billing", func(bg *ghttp.RouterGroup) {
+				bg.Middleware(middleware.JWTAuth)
+				bg.GET("/balance", billing.GetBalance)
+				bg.GET("/transactions", billing.ListTransactions)
+				bg.POST("/credit", billing.CreditAccount)
+				bg.POST("/debit", billing.DebitAccount)
+			})
+
+			// Gateway routes (upstream channels)
+			v1.GET("/gateway/channels", gateway.ListChannels)
+			v1.GET("/gateway/channels/:id", gateway.GetChannel)
+			v1.POST("/gateway/channels", gateway.CreateChannel)
+			v1.PUT("/gateway/channels/:id/status", gateway.UpdateChannelStatus)
 		})
 	})
 

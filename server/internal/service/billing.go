@@ -1,6 +1,18 @@
 package service
 
-type IBilling interface{}
+import (
+	"context"
+
+	"ai-platform/internal/model/dto"
+)
+
+type IBilling interface {
+	EnsureAccount(ctx context.Context, ownerType string, ownerID int64, asset string) (*dto.AccountInfo, error)
+	GetBalance(ctx context.Context, ownerType string, ownerID int64, asset string) (*dto.AccountInfo, error)
+	ListTransactions(ctx context.Context, ownerType string, ownerID int64, page, pageSize int) ([]*dto.TransactionInfo, int, error)
+	CreditAccount(ctx context.Context, in dto.CreditAccountIn) (*dto.TransactionInfo, error)
+	DebitAccount(ctx context.Context, in dto.DebitAccountIn) (*dto.TransactionInfo, error)
+}
 
 var localBilling IBilling
 

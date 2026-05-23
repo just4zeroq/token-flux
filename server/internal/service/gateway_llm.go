@@ -1,6 +1,16 @@
 package service
 
-type ILLMRuntime interface{}
+import (
+	"context"
+	"ai-platform/internal/model/dto"
+)
+
+type ILLMRuntime interface {
+	ListChannels(ctx context.Context, itemID int64) ([]*dto.ChannelInfo, error)
+	GetChannel(ctx context.Context, id int64) (*dto.ChannelInfo, error)
+	CreateChannel(ctx context.Context, in dto.CreateChannelIn) (*dto.ChannelInfo, error)
+	UpdateChannelStatus(ctx context.Context, id int64, status string) error
+}
 
 var localLLMRuntime ILLMRuntime
 
