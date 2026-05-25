@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"math/rand"
+	"strconv"
 	"strings"
 	"time"
 
@@ -150,29 +151,19 @@ func loadCandidates(ctx context.Context, modelSpecID int64) ([]candidateRow, err
 }
 
 // channelSupportsOpenAI returns true when the channel's protocols_json contains
-// the openai-compatible key (object form) or includes it in an array form.
+// the openai-compatible key. The expected shape is an object keyed by protocol
+// name, e.g. {"openai-compatible": {"base_url": "https://..."}} — matching the
+// allowedProtocolKeys validation in channel.go and the extractBaseURL contract.
 func channelSupportsOpenAI(protocolsJson string) bool {
 	if protocolsJson == "" {
 		return false
 	}
-	// Try object form: {"openai-compatible": {...}}
 	var obj map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(protocolsJson), &obj); err == nil {
-		if _, ok := obj[protocolOpenAICompatible]; ok {
-			return true
-		}
+	if err := json.Unmarshal([]byte(protocolsJson), &obj); err != nil {
 		return false
 	}
-	// Fall back to array form: ["openai-compatible", ...]
-	var arr []string
-	if err := json.Unmarshal([]byte(protocolsJson), &arr); err == nil {
-		for _, p := range arr {
-			if p == protocolOpenAICompatible {
-				return true
-			}
-		}
-	}
-	return false
+	_, ok := obj[protocolOpenAICompatible]
+	return ok
 }
 
 // pickRandomKeyModel resolves the model spec, gathers active candidates, and returns one at random.
@@ -299,7 +290,7 @@ func (s *sLLM) proxyOpenAI(ctx context.Context, in dto.OpenAIProxyRequest, path,
 	}
 
 	// 6. Replace request model.
-	newBody, _, err := replaceRequestModel(in.RawBody, scheduled.UpstreamModelName)
+	newBody, err := replaceRequestModel(in.RawBody, scheduled.UpstreamModelName)
 	if err != nil {
 		return nil, err
 	}
@@ -408,22 +399,41 @@ func (s *sLLM) proxyOpenAI(ctx context.Context, in dto.OpenAIProxyRequest, path,
 		ProviderRevenueCredits: revenue,
 		CommissionCredits:      commission,
 	})
-	if err != nil {
-		g.Log().Errorf(ctx, "settle usage_record=%d failed: %v", usageID, err)
+	settlementFailed := err != nil
+	if settlementFailed {
+		// Settlement failed after a successful upstream call. The usage record was
+		// inserted as 'success' with cost/revenue/commission populated but the
+		// double-entry ledger never moved, so credits were not actually debited.
+		// Re-mark the record so a future recovery job (T8) can retry settlement.
+		wrappedErr := gerror.Wrap(err, "submit_and_settle").Error()
+		g.Log().Errorf(ctx, "settlement failed for usage_record=%d user=%d provider=%d cost=%d: %v (marked settlement_pending for recovery)",
+			usageID, in.UserID, scheduled.ProviderUserID, cost, err)
+		_, updErr := g.DB().Model("llm_usage_records").Ctx(ctx).
+			Where("id", usageID).
+			Data(g.Map{
+				"status":        "settlement_pending",
+				"error_code":    "settlement_failed",
+				"error_message": truncate(wrappedErr, 1024),
+			}).Update()
+		if updErr != nil {
+			g.Log().Errorf(ctx, "mark usage_record=%d settlement_pending failed: %v", usageID, updErr)
+		}
 	}
 
 	// 12. Quota tracking on key + key-model.
+	// Bump quotas even when settlement failed — the provider did the work and
+	// usage_record_id is logged above so an operator can reconcile.
 	if cost > 0 {
 		_, qerr := g.DB().Model("llm_model_keys").Ctx(ctx).
 			Where("id", scheduled.ModelKeyID).
-			Data(g.Map{"quota_used_credits": gdb.Raw("quota_used_credits + " + i64s(cost))}).
+			Data(g.Map{"quota_used_credits": gdb.Raw("quota_used_credits + " + strconv.FormatInt(cost, 10))}).
 			Update()
 		if qerr != nil {
 			g.Log().Warningf(ctx, "update model_key quota failed key_id=%d: %v", scheduled.ModelKeyID, qerr)
 		}
 		_, qerr = g.DB().Model("llm_model_key_models").Ctx(ctx).
 			Where("id", scheduled.KeyModelID).
-			Data(g.Map{"quota_used_credits": gdb.Raw("quota_used_credits + " + i64s(cost))}).
+			Data(g.Map{"quota_used_credits": gdb.Raw("quota_used_credits + " + strconv.FormatInt(cost, 10))}).
 			Update()
 		if qerr != nil {
 			g.Log().Warningf(ctx, "update key_model quota failed key_model_id=%d: %v", scheduled.KeyModelID, qerr)
@@ -431,56 +441,38 @@ func (s *sLLM) proxyOpenAI(ctx context.Context, in dto.OpenAIProxyRequest, path,
 	}
 
 	// 13. Overdraft check: if consumer balance went negative, disable their api keys.
-	var post struct {
-		BalanceMicro int64 `json:"balance_micro"`
-	}
-	err = g.DB().Model("accounts").Ctx(ctx).
-		Where("owner_type", "user").
-		Where("owner_id", in.UserID).
-		Where("asset", "credits").
-		Fields("balance_micro").
-		Scan(&post)
-	if err == nil && post.BalanceMicro < 0 {
-		_, derr := g.DB().Model("api_keys").Ctx(ctx).
-			Where("user_id", in.UserID).
-			Where("status", 1).
-			Where("deleted_at IS NULL").
-			Data(g.Map{
-				"status":           0,
-				"disabled_reason":  "overdraft",
-				"updated_at":       gdb.Raw("NOW()"),
-			}).Update()
-		if derr != nil {
-			g.Log().Warningf(ctx, "disable overdraft api_keys failed user=%d: %v", in.UserID, derr)
+	// Skip when settlement failed — the balance wasn't actually changed, so we have
+	// no basis to disable anything.
+	if !settlementFailed {
+		var post struct {
+			BalanceMicro int64 `json:"balance_micro"`
+		}
+		err = g.DB().Model("accounts").Ctx(ctx).
+			Where("owner_type", "user").
+			Where("owner_id", in.UserID).
+			Where("asset", "credits").
+			Fields("balance_micro").
+			Scan(&post)
+		if err != nil {
+			g.Log().Errorf(ctx, "post-settlement balance read failed for user %d: %v", in.UserID, err)
+		} else if post.BalanceMicro < 0 {
+			_, derr := g.DB().Model("api_keys").Ctx(ctx).
+				Where("user_id", in.UserID).
+				Where("status", 1).
+				Where("deleted_at IS NULL").
+				Data(g.Map{
+					"status":          0,
+					"disabled_reason": "overdraft",
+					"updated_at":      gdb.Raw("NOW()"),
+				}).Update()
+			if derr != nil {
+				g.Log().Warningf(ctx, "disable overdraft api_keys failed user=%d: %v", in.UserID, derr)
+			}
 		}
 	}
 
 	// 14. Return upstream response.
 	return &dto.OpenAIProxyResponse{StatusCode: status, Body: respBody, Headers: headers}, nil
-}
-
-func i64s(n int64) string {
-	// Minimal integer-to-string for gdb.Raw composition. strconv is safer but adds an import;
-	// fmt-style would also work. Keep it explicit and dependency-free.
-	if n == 0 {
-		return "0"
-	}
-	neg := n < 0
-	if neg {
-		n = -n
-	}
-	var buf [20]byte
-	i := len(buf)
-	for n > 0 {
-		i--
-		buf[i] = byte('0' + n%10)
-		n /= 10
-	}
-	if neg {
-		i--
-		buf[i] = '-'
-	}
-	return string(buf[i:])
 }
 
 func truncate(s string, n int) string {

@@ -69,21 +69,21 @@ func extractRequestedModel(body []byte) (string, error) {
 	return model, nil
 }
 
-func replaceRequestModel(body []byte, upstreamModel string) ([]byte, bool, error) {
+func replaceRequestModel(body []byte, upstreamModel string) ([]byte, error) {
 	var m map[string]json.RawMessage
 	if err := json.Unmarshal(body, &m); err != nil {
-		return nil, false, gerror.Wrap(err, "parse request body failed")
+		return nil, gerror.Wrap(err, "parse request body failed")
 	}
 	newModel, err := json.Marshal(upstreamModel)
 	if err != nil {
-		return nil, false, gerror.Wrap(err, "marshal upstream model failed")
+		return nil, gerror.Wrap(err, "marshal upstream model failed")
 	}
 	m["model"] = newModel
 	out, err := json.Marshal(m)
 	if err != nil {
-		return nil, false, gerror.Wrap(err, "re-marshal request body failed")
+		return nil, gerror.Wrap(err, "re-marshal request body failed")
 	}
-	return out, true, nil
+	return out, nil
 }
 
 // normalizeOpenAIUsage extracts usage statistics from an OpenAI-compatible response.
