@@ -38,5 +38,5 @@ type SettlementRecordInfo struct {
 	Status                 string    `json:"status"`
 	ErrorMessage           string    `json:"error_message"`
 	CreatedAt              time.Time `json:"created_at"`
-	SettledAt              time.Time `json:"settled_at,omitempty"`
+	SettledAt              time.Time `json:"settled_at,omitzero"`
 }

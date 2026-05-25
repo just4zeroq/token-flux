@@ -11,7 +11,7 @@ type LLMChannelInfo struct {
 	Status           string    `json:"status"`
 	CreatedByUserID  int64     `json:"created_by_user_id"`
 	ReviewedByUserID int64     `json:"reviewed_by_user_id"`
-	ReviewedAt       time.Time `json:"reviewed_at,omitempty"`
+	ReviewedAt       time.Time `json:"reviewed_at,omitzero"`
 	ReviewNote       string    `json:"review_note"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
@@ -141,7 +141,7 @@ type LLMModelKeyInfo struct {
 	QuotaLimitCredits int64     `json:"quota_limit_credits"`
 	QuotaUsedCredits  int64     `json:"quota_used_credits"`
 	Status            string    `json:"status"`
-	LastTestAt        time.Time `json:"last_test_at,omitempty"`
+	LastTestAt        time.Time `json:"last_test_at,omitzero"`
 	LastTestStatus    string    `json:"last_test_status"`
 	LastTestError     string    `json:"last_test_error"`
 	TestAttempts      int       `json:"test_attempts"`
