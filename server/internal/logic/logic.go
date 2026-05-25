@@ -11,6 +11,7 @@ import (
 	_ "ai-platform/internal/logic/catalog"
 	_ "ai-platform/internal/logic/gateway"
 	_ "ai-platform/internal/logic/identity"
+	_ "ai-platform/internal/logic/llm"
 	_ "ai-platform/internal/logic/market"
 	_ "ai-platform/internal/logic/pricing"
 	_ "ai-platform/internal/logic/settlement"
