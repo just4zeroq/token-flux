@@ -7,37 +7,41 @@ import (
 
 	"ai-platform/internal/model/dto"
 
+	"github.com/gogf/gf/v2/database/gdb"
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
 )
 
 type modelSpecRow struct {
-	ID               int64       `json:"id"`
-	DeveloperName    string      `json:"developer_name"`
-	ModelName        string      `json:"model_name"`
-	ModelCode        string      `json:"model_code"`
-	DisplayName      string      `json:"display_name"`
-	ModelFamily      string      `json:"model_family"`
-	Description      string      `json:"description"`
-	CapabilitiesJson string      `json:"capabilities_json"`
-	ContextWindow    int         `json:"context_window"`
-	MaxInputTokens   int         `json:"max_input_tokens"`
-	MaxOutputTokens  int         `json:"max_output_tokens"`
-	SupportsStream   bool        `json:"supports_stream"`
-	SupportsTools    bool        `json:"supports_tools"`
-	SupportsVision   bool        `json:"supports_vision"`
-	SupportsJsonMode bool        `json:"supports_json_mode"`
-	SupportsReasoning bool       `json:"supports_reasoning"`
-	SupportsLogprobs bool        `json:"supports_logprobs"`
-	SupportedParamsJson string   `json:"supported_params_json"`
-	DefaultParamsJson string     `json:"default_params_json"`
-	ParamLimitsJson   string     `json:"param_limits_json"`
-	SourceType        string     `json:"source_type"`
-	CreatedByUserID   int64      `json:"created_by_user_id"`
-	Status            string     `json:"status"`
-	CreatedAt         gtime.Time `json:"created_at"`
-	UpdatedAt         gtime.Time `json:"updated_at"`
+	ID                 int64       `json:"id"`
+	DeveloperName      string      `json:"developer_name"`
+	ModelName          string      `json:"model_name"`
+	ModelCode          string      `json:"model_code"`
+	DisplayName        string      `json:"display_name"`
+	ModelFamily        string      `json:"model_family"`
+	Description        string      `json:"description"`
+	CapabilitiesJson   string      `json:"capabilities_json"`
+	ContextWindow      int         `json:"context_window"`
+	MaxInputTokens     int         `json:"max_input_tokens"`
+	MaxOutputTokens    int         `json:"max_output_tokens"`
+	SupportsStream     bool        `json:"supports_stream"`
+	SupportsTools      bool        `json:"supports_tools"`
+	SupportsVision     bool        `json:"supports_vision"`
+	SupportsJsonMode   bool        `json:"supports_json_mode"`
+	SupportsReasoning  bool        `json:"supports_reasoning"`
+	SupportsLogprobs   bool        `json:"supports_logprobs"`
+	SupportedParamsJson string     `json:"supported_params_json"`
+	DefaultParamsJson  string      `json:"default_params_json"`
+	ParamLimitsJson    string      `json:"param_limits_json"`
+	SourceType         string      `json:"source_type"`
+	CreatedByUserID    int64       `json:"created_by_user_id"`
+	Status             string      `json:"status"`
+	ReviewedByUserID   int64       `json:"reviewed_by_user_id"`
+	ReviewedAt         *gtime.Time `json:"reviewed_at"`
+	ReviewNote         string      `json:"review_note"`
+	CreatedAt          gtime.Time  `json:"created_at"`
+	UpdatedAt          gtime.Time  `json:"updated_at"`
 }
 
 func (r *modelSpecRow) toDTO() *dto.LLMModelSpecInfo {
@@ -212,48 +216,56 @@ func (r *modelPriceRow) toDTO() *dto.LLMModelPriceInfo {
 }
 
 func (s *sLLM) UpsertModelPrice(ctx context.Context, in dto.LLMUpsertModelPriceIn) (*dto.LLMModelPriceInfo, error) {
-	// Check if existing price for (model_spec_id, capability) with status 'active'.
-	var existing modelPriceRow
-	err := g.DB().Model("llm_model_prices").Ctx(ctx).
-		Where("model_spec_id", in.ModelSpecID).
-		Where("capability", in.Capability).
-		Where("status", "active").
-		Scan(&existing)
-	if err != nil {
-		return nil, gerror.Wrap(err, "query existing price failed")
-	}
+	var info *dto.LLMModelPriceInfo
 
-	if existing.ID != 0 {
-		// Deactivate old price.
-		_, err = g.DB().Model("llm_model_prices").Ctx(ctx).
-			Where("id", existing.ID).
-			Data(g.Map{"status": "inactive"}).
-			Update()
-		if err != nil {
-			return nil, gerror.Wrap(err, "deactivate old price failed")
+	err := g.DB().Transaction(ctx, func(ctx context.Context, tx gdb.TX) error {
+		// Check if existing price for (model_spec_id, capability) with status 'active'.
+		var existing modelPriceRow
+		queryErr := tx.Model("llm_model_prices").
+			Where("model_spec_id", in.ModelSpecID).
+			Where("capability", in.Capability).
+			Where("status", "active").
+			Scan(&existing)
+		if queryErr != nil {
+			return gerror.Wrap(queryErr, "query existing price failed")
 		}
-	}
 
-	// Insert new price with status 'active'.
-	result, err := g.DB().Model("llm_model_prices").Ctx(ctx).Data(g.Map{
-		"model_spec_id":           in.ModelSpecID,
-		"capability":              in.Capability,
-		"cache_hit_price_per_1k":  in.CacheHitPricePer1K,
-		"cache_miss_price_per_1k": in.CacheMissPricePer1K,
-		"output_price_per_1k":     in.OutputPricePer1K,
-		"status":                  "active",
-	}).Insert()
-	if err != nil {
-		return nil, gerror.Wrap(err, "insert model price failed")
-	}
+		if existing.ID != 0 {
+			_, updateErr := tx.Model("llm_model_prices").
+				Where("id", existing.ID).
+				Data(g.Map{"status": "inactive"}).
+				Update()
+			if updateErr != nil {
+				return gerror.Wrap(updateErr, "deactivate old price failed")
+			}
+		}
 
-	id, _ := result.LastInsertId()
-	var row modelPriceRow
-	err = g.DB().Model("llm_model_prices").Ctx(ctx).Where("id", id).Scan(&row)
+		// Insert new price with status 'active'.
+		result, insertErr := tx.Model("llm_model_prices").Data(g.Map{
+			"model_spec_id":           in.ModelSpecID,
+			"capability":              in.Capability,
+			"cache_hit_price_per_1k":  in.CacheHitPricePer1K,
+			"cache_miss_price_per_1k": in.CacheMissPricePer1K,
+			"output_price_per_1k":     in.OutputPricePer1K,
+			"status":                  "active",
+		}).Insert()
+		if insertErr != nil {
+			return gerror.Wrap(insertErr, "insert model price failed")
+		}
+
+		id, _ := result.LastInsertId()
+		var row modelPriceRow
+		scanErr := tx.Model("llm_model_prices").Where("id", id).Scan(&row)
+		if scanErr != nil {
+			return gerror.Wrap(scanErr, "query created price failed")
+		}
+		info = row.toDTO()
+		return nil
+	})
 	if err != nil {
-		return nil, gerror.Wrap(err, "query created price failed")
+		return nil, err
 	}
-	return row.toDTO(), nil
+	return info, nil
 }
 
 func (s *sLLM) ListModelPrices(ctx context.Context, modelSpecID int64) ([]*dto.LLMModelPriceInfo, error) {

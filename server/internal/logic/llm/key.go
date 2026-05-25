@@ -204,6 +204,11 @@ type keyModelRow struct {
 	QuotaUsedCredits    int64       `json:"quota_used_credits"`
 	ProviderShareBps    int         `json:"provider_share_bps"`
 	Status              string      `json:"status"`
+	TestAttempts        int         `json:"test_attempts"`
+	LastTestAt          *gtime.Time `json:"last_test_at"`
+	LastTestStatus      string      `json:"last_test_status"`
+	LastTestError       string      `json:"last_test_error"`
+	NextTestAt          *gtime.Time `json:"next_test_at"`
 	ConsecutiveFailures int         `json:"consecutive_failures"`
 	LastErrorCode       string      `json:"last_error_code"`
 	LastErrorMessage    string      `json:"last_error_message"`
