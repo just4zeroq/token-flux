@@ -10,6 +10,7 @@ import (
 	"ai-platform/internal/controller/api/billing"
 	"ai-platform/internal/controller/api/catalog"
 	"ai-platform/internal/controller/api/identity"
+	llmapi "ai-platform/internal/controller/api/llm"
 	"ai-platform/internal/controller/api/market"
 	"ai-platform/internal/controller/api/pricing"
 	"ai-platform/internal/controller/api/usage"
@@ -98,6 +99,33 @@ func RunAPI() {
 				ag.GET("/users/:id", admin.GetUser)
 				ag.PUT("/users/:id/status", admin.UpdateUserStatus)
 				ag.GET("/stats", admin.GetStats)
+
+				// LLM admin management
+				ag.POST("/llm/channels", llmapi.CreateChannel)
+				ag.GET("/llm/channels", llmapi.ListChannels)
+				ag.PUT("/llm/channels/:id/review", llmapi.ReviewChannel)
+				ag.POST("/llm/models", llmapi.CreateModel)
+				ag.GET("/llm/models", llmapi.ListModels)
+				ag.PUT("/llm/models/:id/review", llmapi.ReviewModel)
+				ag.POST("/llm/models/:id/prices", llmapi.UpsertModelPrice)
+				ag.GET("/llm/models/:id/prices", llmapi.ListModelPrices)
+				ag.GET("/llm/model-keys", llmapi.ListAllModelKeys)
+				ag.GET("/llm/key-models", llmapi.ListAllKeyModels)
+				ag.POST("/llm/key-models/:id/test", llmapi.TriggerKeyModelTest)
+			})
+
+			// Provider LLM routes (JWT only; per-handler role>=10 check)
+			v1.Group("/provider/llm", func(pg *ghttp.RouterGroup) {
+				pg.Middleware(middleware.JWTAuth)
+				pg.POST("/channels", llmapi.ProviderCreateChannel)
+				pg.POST("/models", llmapi.ProviderCreateModel)
+				pg.GET("/models", llmapi.ProviderListModels)
+				pg.POST("/model-keys", llmapi.ProviderCreateModelKey)
+				pg.GET("/model-keys", llmapi.ProviderListModelKeys)
+				pg.DELETE("/model-keys/:id", llmapi.ProviderDisableModelKey)
+				pg.POST("/model-keys/:id/models", llmapi.ProviderBindKeyModel)
+				pg.GET("/model-keys/:id/models", llmapi.ProviderListKeyModels)
+				pg.POST("/key-models/:id/test", llmapi.ProviderTriggerKeyModelTest)
 			})
 		})
 	})
