@@ -41,6 +41,39 @@ func encryptKey(plaintext string) (string, error) {
 	return hex.EncodeToString(ciphertext), nil
 }
 
+func decryptKey(ciphertextHex string) (string, error) {
+	hexKey := os.Getenv("MODEL_KEY_ENCRYPTION_KEY")
+	if hexKey == "" {
+		return "", gerror.New("MODEL_KEY_ENCRYPTION_KEY not set")
+	}
+	key, err := hex.DecodeString(hexKey)
+	if err != nil {
+		return "", gerror.Wrap(err, "invalid MODEL_KEY_ENCRYPTION_KEY hex")
+	}
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return "", gerror.Wrap(err, "create AES cipher failed")
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return "", gerror.Wrap(err, "create GCM failed")
+	}
+	ciphertext, err := hex.DecodeString(ciphertextHex)
+	if err != nil {
+		return "", gerror.Wrap(err, "invalid ciphertext hex")
+	}
+	nonceSize := gcm.NonceSize()
+	if len(ciphertext) < nonceSize {
+		return "", gerror.New("ciphertext too short")
+	}
+	nonce, sealed := ciphertext[:nonceSize], ciphertext[nonceSize:]
+	plaintext, err := gcm.Open(nil, nonce, sealed, nil)
+	if err != nil {
+		return "", gerror.Wrap(err, "decrypt failed")
+	}
+	return string(plaintext), nil
+}
+
 func maskKey(key string) string {
 	if len(key) <= 4 {
 		return "****"
