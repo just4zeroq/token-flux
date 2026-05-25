@@ -308,6 +308,18 @@ func (s *sSettlement) CreateRecharge(ctx context.Context, in dto.RechargeSettlem
 			"settled_at":               gtime.Now(),
 		}).Insert()
 		if insertErr != nil {
+			// UNIQUE(ref_type, ref_id) violation — concurrent duplicate.
+			existing, lookupErr := s.getRecordByRef(ctx, in.RefType, in.RefID)
+			if lookupErr != nil {
+				return gerror.Wrap(lookupErr, "idempotent lookup after insert conflict failed")
+			}
+			if existing != nil && existing.TransactionID != 0 {
+				txInfo, lookupErr = s.getTransaction(ctx, existing.TransactionID)
+				if lookupErr != nil {
+					return lookupErr
+				}
+				return nil
+			}
 			return gerror.Wrap(insertErr, "insert recharge settlement record failed")
 		}
 		recID, _ := recResult.LastInsertId()
