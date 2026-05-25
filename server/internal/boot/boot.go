@@ -15,6 +15,7 @@ import (
 	"ai-platform/internal/controller/api/pricing"
 	"ai-platform/internal/controller/api/usage"
 	"ai-platform/internal/controller/api/wallet"
+	"ai-platform/internal/controller/gateway"
 	"ai-platform/internal/middleware"
 )
 
@@ -135,6 +136,14 @@ func RunAPI() {
 	gwSrv.Group("/", func(group *ghttp.RouterGroup) {
 		group.Middleware(middleware.Recover, middleware.RequestID, middleware.CORS)
 		group.GET("/health", health)
+
+		group.Group("/v1", func(v1 *ghttp.RouterGroup) {
+			v1.Middleware(middleware.APIKeyAuth)
+			v1.GET("/models", gateway.Models)
+			v1.POST("/chat/completions", gateway.ChatCompletions)
+			v1.POST("/completions", gateway.Completions)
+			v1.POST("/embeddings", gateway.Embeddings)
+		})
 	})
 
 	if err := apiSrv.Start(); err != nil {
