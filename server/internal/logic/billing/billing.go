@@ -406,3 +406,25 @@ func (s *sBilling) DebitAccount(ctx context.Context, in dto.DebitAccountIn) (*dt
 	}
 	return txInfo, nil
 }
+
+// RechargeCredits adds credits to a user's account via the settlement ledger
+// and restores any api_keys that were disabled due to overdraft.
+func (s *sBilling) RechargeCredits(ctx context.Context, userID, amountCredits int64, refType string, refID int64) (*dto.TransactionInfo, error) {
+	if amountCredits <= 0 {
+		return nil, gerror.New("amount_credits must be positive")
+	}
+	tx, err := service.Settlement().CreateRecharge(ctx, dto.RechargeSettlementIn{
+		UserID:          userID,
+		RefType:         refType,
+		RefID:           refID,
+		RechargeCredits: amountCredits,
+	})
+	if err != nil {
+		return nil, gerror.Wrap(err, "recharge settlement failed")
+	}
+	if restoreErr := service.Settlement().RestoreOverdraftKeys(ctx, userID); restoreErr != nil {
+		// Don't fail the recharge if key restore fails — log and move on.
+		g.Log().Errorf(ctx, "restore overdraft keys failed for user %d after recharge: %v", userID, restoreErr)
+	}
+	return tx, nil
+}

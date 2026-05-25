@@ -81,6 +81,7 @@ func RunAPI() {
 				bg.GET("/transactions", billing.ListTransactions)
 				bg.POST("/credit", billing.CreditAccount)
 				bg.POST("/debit", billing.DebitAccount)
+				bg.POST("/recharge", billing.Recharge)
 			})
 
 			// Wallet routes (JWT required)

@@ -75,3 +75,24 @@ func DebitAccount(r *ghttp.Request) {
 	}
 	r.Response.WriteJson(tx)
 }
+
+func Recharge(r *ghttp.Request) {
+	userID := middleware.GetUserID(r)
+	var in dto.RechargeCreditsIn
+	if err := r.Parse(&in); err != nil {
+		r.Response.WriteStatusExit(400, map[string]any{
+			"code": 400, "message": "invalid params: " + err.Error(),
+		})
+		return
+	}
+	refType := in.RefType
+	if refType == "" {
+		refType = "manual_recharge"
+	}
+	tx, err := service.Billing().RechargeCredits(r.Context(), userID, in.AmountCredits, refType, in.RefID)
+	if err != nil {
+		r.Response.WriteStatusExit(400, map[string]any{"code": 400, "message": err.Error()})
+		return
+	}
+	r.Response.WriteJson(tx)
+}

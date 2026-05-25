@@ -44,3 +44,9 @@ type DebitAccountIn struct {
 	RefType     string `json:"ref_type"`
 	RefID       int64  `json:"ref_id"`
 }
+
+type RechargeCreditsIn struct {
+	AmountCredits int64  `json:"amount_credits" v:"required|min:1"`
+	RefType       string `json:"ref_type"`
+	RefID         int64  `json:"ref_id"`
+}
