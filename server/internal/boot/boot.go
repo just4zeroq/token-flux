@@ -9,7 +9,6 @@ import (
 	"ai-platform/internal/controller/api/admin"
 	"ai-platform/internal/controller/api/billing"
 	"ai-platform/internal/controller/api/catalog"
-	"ai-platform/internal/controller/api/gateway"
 	"ai-platform/internal/controller/api/identity"
 	"ai-platform/internal/controller/api/market"
 	"ai-platform/internal/controller/api/pricing"
@@ -100,12 +99,6 @@ func RunAPI() {
 				ag.PUT("/users/:id/status", admin.UpdateUserStatus)
 				ag.GET("/stats", admin.GetStats)
 			})
-
-			// Gateway routes (upstream channels)
-			v1.GET("/gateway/channels", gateway.ListChannels)
-			v1.GET("/gateway/channels/:id", gateway.GetChannel)
-			v1.POST("/gateway/channels", gateway.CreateChannel)
-			v1.PUT("/gateway/channels/:id/status", gateway.UpdateChannelStatus)
 		})
 	})
 

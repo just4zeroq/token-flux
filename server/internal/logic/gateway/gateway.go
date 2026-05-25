@@ -5,6 +5,5 @@ package gateway
 
 import (
 	_ "ai-platform/internal/logic/gateway/agent"
-	_ "ai-platform/internal/logic/gateway/llm"
 	_ "ai-platform/internal/logic/gateway/mcp"
 )
