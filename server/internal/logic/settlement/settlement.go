@@ -2,7 +2,6 @@ package settlement
 
 import (
 	"context"
-	"database/sql"
 	"time"
 
 	"ai-platform/internal/model/dto"
@@ -71,9 +70,6 @@ func (s *sSettlement) getRecord(ctx context.Context, id int64) (*settlementRecor
 		Where("id", id).
 		Scan(&rec)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, gerror.Wrap(err, "settlement record not found")
-		}
 		return nil, gerror.Wrap(err, "query settlement record failed")
 	}
 	if rec.ID == 0 {
@@ -90,9 +86,6 @@ func (s *sSettlement) getRecordByRef(ctx context.Context, refType string, refID 
 		Where("ref_id", refID).
 		Scan(&rec)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, nil
-		}
 		return nil, gerror.Wrap(err, "query settlement record by ref failed")
 	}
 	if rec.ID == 0 {
@@ -249,12 +242,15 @@ func (s *sSettlement) Settle(ctx context.Context, recordID int64) (*dto.Transact
 
 	if err != nil {
 		// Mark record as failed outside the transaction.
-		g.DB().Model("settlement_records").Ctx(ctx).
+		_, updateErr := g.DB().Model("settlement_records").Ctx(ctx).
 			Where("id", rec.ID).
 			Data(g.Map{
 				"status":        "failed",
 				"error_message": err.Error(),
 			}).Update()
+		if updateErr != nil {
+			g.Log().Errorf(ctx, "failed to mark settlement %d as failed: %v", rec.ID, updateErr)
+		}
 		return nil, err
 	}
 
