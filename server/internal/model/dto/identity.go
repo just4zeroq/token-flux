@@ -2,6 +2,12 @@ package dto
 
 import "time"
 
+// Role constants
+const (
+	RoleUser     = 0
+	RoleProvider = 1
+)
+
 // ========== Registration ==========
 
 type RegisterIn struct {
