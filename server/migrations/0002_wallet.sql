@@ -1,7 +1,7 @@
 -- +goose Up
 CREATE TABLE deposit_addresses (
     id         BIGSERIAL PRIMARY KEY,
-    user_id    BIGINT       NOT NULL REFERENCES users(id),
+    user_id    BIGINT       NOT NULL,
     chain      VARCHAR(32)  NOT NULL,
     address    VARCHAR(255) NOT NULL,
     hd_path    VARCHAR(128) NOT NULL,
@@ -12,7 +12,7 @@ CREATE TABLE deposit_addresses (
 
 CREATE TABLE chain_deposits (
     id                 BIGSERIAL PRIMARY KEY,
-    user_id            BIGINT          NOT NULL REFERENCES users(id),
+    user_id            BIGINT          NOT NULL,
     chain              VARCHAR(32)     NOT NULL,
     tx_hash            VARCHAR(128)    NOT NULL,
     from_addr          VARCHAR(255)    NOT NULL,
@@ -25,13 +25,12 @@ CREATE TABLE chain_deposits (
     observed_at        TIMESTAMPTZ     NOT NULL DEFAULT NOW(),
     UNIQUE (chain, tx_hash)
 );
-
 CREATE INDEX idx_chain_deposits_user ON chain_deposits(user_id);
 CREATE INDEX idx_chain_deposits_status ON chain_deposits(status);
 
 CREATE TABLE withdraw_requests (
     id              BIGSERIAL PRIMARY KEY,
-    user_id         BIGINT       NOT NULL REFERENCES users(id),
+    user_id         BIGINT       NOT NULL,
     chain           VARCHAR(32)  NOT NULL,
     to_address      VARCHAR(255) NOT NULL,
     amount_balance  BIGINT       NOT NULL,
@@ -42,7 +41,6 @@ CREATE TABLE withdraw_requests (
     confirmed_at    TIMESTAMPTZ,
     created_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
-
 CREATE INDEX idx_withdraw_requests_user ON withdraw_requests(user_id);
 CREATE INDEX idx_withdraw_requests_status ON withdraw_requests(status);
 
