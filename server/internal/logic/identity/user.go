@@ -47,7 +47,7 @@ func (s *sIdentity) Register(ctx context.Context, in dto.RegisterIn) (*dto.Regis
 		"password":   string(hash),
 		"source":     "email",
 		"status":     0,
-		"role":       1,
+		"role":       0,
 		"created_at": gtime.Now(),
 		"updated_at": gtime.Now(),
 	}).Insert()

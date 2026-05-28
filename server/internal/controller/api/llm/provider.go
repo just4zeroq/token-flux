@@ -8,11 +8,11 @@ import (
 	"github.com/gogf/gf/v2/net/ghttp"
 )
 
-// requireProvider checks the JWT-authenticated user has provider role (>=10).
+// requireProvider checks the JWT-authenticated user has provider role (role == 1).
 // Returns the userID, or 0 if access was denied (response already written).
 func requireProvider(r *ghttp.Request) int64 {
 	role := r.GetCtxVar(middleware.CtxKeyRole).Int()
-	if role < 10 {
+	if role != 1 {
 		r.Response.WriteStatusExit(403, map[string]any{"code": 403, "message": "provider access required"})
 		return 0
 	}
