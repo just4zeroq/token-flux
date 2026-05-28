@@ -66,14 +66,17 @@ func (s *sLLM) CreateChannel(ctx context.Context, in dto.LLMCreateChannelIn) (*d
 		}
 	}
 
-	result, err := g.DB().Model("llm_channels").Ctx(ctx).Data(g.Map{
-		"code":              in.Code,
-		"name":              in.Name,
-		"description":       in.Description,
-		"protocols_json":    in.ProtocolsJson,
-		"status":            "pending",
-		"created_by_user_id": in.CreatedByUserID,
-	}).Insert()
+	data := g.Map{
+		"code":           in.Code,
+		"name":           in.Name,
+		"description":    in.Description,
+		"protocols_json": in.ProtocolsJson,
+		"status":         "pending",
+	}
+	if in.CreatedByUserID != 0 {
+		data["created_by_user_id"] = in.CreatedByUserID
+	}
+	result, err := g.DB().Model("llm_channels").Ctx(ctx).Data(data).Insert()
 	if err != nil {
 		return nil, gerror.Wrap(err, "insert channel failed")
 	}

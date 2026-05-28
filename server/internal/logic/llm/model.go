@@ -87,7 +87,7 @@ func (s *sLLM) CreateModelSpec(ctx context.Context, in dto.LLMCreateModelSpecIn)
 		modelCode = strings.ToLower(in.DeveloperName + "/" + in.ModelName)
 	}
 
-	result, err := g.DB().Model("llm_model_specs").Ctx(ctx).Data(g.Map{
+	data := g.Map{
 		"developer_name":        in.DeveloperName,
 		"model_name":            in.ModelName,
 		"model_code":            modelCode,
@@ -108,9 +108,12 @@ func (s *sLLM) CreateModelSpec(ctx context.Context, in dto.LLMCreateModelSpecIn)
 		"default_params_json":   in.DefaultParamsJson,
 		"param_limits_json":     in.ParamLimitsJson,
 		"source_type":           in.SourceType,
-		"created_by_user_id":    in.CreatedByUserID,
 		"status":                "pending",
-	}).Insert()
+	}
+	if in.CreatedByUserID != 0 {
+		data["created_by_user_id"] = in.CreatedByUserID
+	}
+	result, err := g.DB().Model("llm_model_specs").Ctx(ctx).Data(data).Insert()
 	if err != nil {
 		return nil, gerror.Wrap(err, "insert model spec failed")
 	}

@@ -6,6 +6,7 @@ import (
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/os/gctx"
 
+	adminapi "ai-platform/internal/controller/api/admin"
 	"ai-platform/internal/controller/api/billing"
 	"ai-platform/internal/controller/api/identity"
 	llmapi "ai-platform/internal/controller/api/llm"
@@ -14,7 +15,7 @@ import (
 	"ai-platform/internal/middleware"
 )
 
-// RunAPI starts both the api (:8080) and gateway (:8081) ghttp.Servers and blocks.
+// RunAPI starts the api (:8080), gateway (:8081), and admin (:8082) ghttp.Servers and blocks.
 func RunAPI() {
 	ctx := gctx.New()
 
@@ -89,14 +90,42 @@ func RunAPI() {
 		})
 	})
 
+	adminSrv := g.Server("admin")
+	adminSrv.SetAddr(":8082")
+	adminSrv.Group("/", func(group *ghttp.RouterGroup) {
+		group.Middleware(middleware.Recover, middleware.RequestID, middleware.CORS)
+		group.GET("/health", health)
+
+		group.Group("/api/admin", func(admin *ghttp.RouterGroup) {
+			admin.Middleware(middleware.AdminTokenAuth)
+
+			admin.Group("/llm", func(llm *ghttp.RouterGroup) {
+				llm.POST("/channels", adminapi.CreateChannel)
+				llm.GET("/channels", adminapi.ListChannels)
+				llm.PUT("/channels/:id/review", adminapi.ReviewChannel)
+				llm.POST("/models", adminapi.CreateModel)
+				llm.GET("/models", adminapi.ListModels)
+				llm.PUT("/models/:id/review", adminapi.ReviewModel)
+				llm.POST("/models/:id/prices", adminapi.UpsertModelPrice)
+				llm.GET("/models/:id/prices", adminapi.ListModelPrices)
+				llm.GET("/model-keys", adminapi.ListAllModelKeys)
+				llm.GET("/key-models", adminapi.ListAllKeyModels)
+				llm.POST("/key-models/:id/test", adminapi.TriggerKeyModelTest)
+			})
+		})
+	})
+
 	if err := apiSrv.Start(); err != nil {
 		g.Log().Fatalf(ctx, "api server start failed: %v", err)
 	}
 	if err := gwSrv.Start(); err != nil {
 		g.Log().Fatalf(ctx, "gateway server start failed: %v", err)
 	}
+	if err := adminSrv.Start(); err != nil {
+		g.Log().Fatalf(ctx, "admin server start failed: %v", err)
+	}
 
-	g.Log().Info(ctx, "ai-platform started: api :8080 + gateway :8081")
+	g.Log().Info(ctx, "ai-platform started: api :8080 + gateway :8081 + admin :8082")
 	g.Wait()
 }
 
