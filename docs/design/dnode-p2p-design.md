@@ -251,6 +251,65 @@ Consumer reports   │              │  Provider reports
 - One side missing → trust the present one (gap fill with retry)
 - Both missing → no settlement, gap in usage logs
 
+### 4.5 Platform Commands (Platform → Node)
+
+平台通过 WS 隧道立即向节点下发控制命令，节点收到后立刻执行，返回 ack。平台超时未收到 ack 则标记节点可能失控。
+
+**Command types:**
+
+| Command | Action | Payload |
+|---------|--------|---------|
+| `update_config` | 更新路由权重/阈值 | `{ weights, thresholds }` |
+| `revoke_model` | 下架某模型 | `{ model_code }` |
+| `revoke_key_hash` | 吊销 key hash | `{ key_hash }` |
+| `suspend` | 暂停节点 | `{ duration_seconds, reason }` |
+| `resume` | 恢复节点 | `{}` |
+| `re_register` | 强制重新注册 | `{}` (节点刷新 models 列表后重新 POST /register) |
+| `pull_logs` | 拉最近请求日志 | `{ since_timestamp, limit }` |
+
+**Message flow:**
+
+```
+Platform                                    Node
+   │                                          │
+   │── WS: { type: "command",                │
+   │         request_id: "cmd-001",           │
+   │         action: "revoke_model",          │
+   │         payload: { model_code: "deepseek-v4-flash" },
+   │         expires_at: 1717200000 } ──────→ │
+   │                                          │  立即执行:
+   │                                          │  · 从 router 移除该 model 路由
+   │                                          │  · 拒绝该 model 的后续请求
+   │                                          │
+   │← WS: { type: "ack",                     │
+   │         request_id: "cmd-001",           │
+   │         status: "ok" } ──────────────── │
+   │                                          │
+```
+
+**Command lifecycle:**
+
+1. 平台发出命令 → 记录 `pending_commands` 表
+2. 节点收到 → 立刻执行 → 返回 ack
+3. 平台收到 ack → 标记 `executed`
+4. `expires_at` 内未收到 ack → 平台重发一次
+5. 两次都没 ack → 平台标记节点 `suspicious`，暂停路由推荐
+
+**Command table (platform DB):**
+
+```sql
+CREATE TABLE p2p_commands (
+    id              BIGSERIAL PRIMARY KEY,
+    node_id         VARCHAR(64) NOT NULL,
+    request_id      VARCHAR(64) NOT NULL UNIQUE,
+    action          VARCHAR(32) NOT NULL,
+    payload         JSONB NOT NULL DEFAULT '{}',
+    status          VARCHAR(16) NOT NULL DEFAULT 'pending',  -- pending | executed | expired
+    created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    executed_at     TIMESTAMPTZ
+);
+```
+
 ---
 
 ## 5. Platform Hub API
