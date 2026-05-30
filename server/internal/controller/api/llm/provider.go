@@ -19,6 +19,26 @@ func requireProvider(r *ghttp.Request) int64 {
 	return middleware.GetUserID(r)
 }
 
+func ProviderListChannels(r *ghttp.Request) {
+	userID := requireProvider(r)
+	if userID == 0 {
+		return
+	}
+	var in dto.LLMListChannelsIn
+	if err := r.Parse(&in); err != nil {
+		r.Response.WriteStatusExit(400, map[string]any{"code": 400, "message": "invalid params: " + err.Error()})
+		return
+	}
+	// Show built-in channels + own channels.
+	in.ProviderUserID = userID
+	list, total, err := service.LLM().ListChannels(r.Context(), in)
+	if err != nil {
+		r.Response.WriteStatusExit(500, map[string]any{"code": 500, "message": err.Error()})
+		return
+	}
+	r.Response.WriteJson(map[string]any{"list": list, "total": total, "page": in.Page, "size": in.Size})
+}
+
 func ProviderCreateChannel(r *ghttp.Request) {
 	userID := requireProvider(r)
 	if userID == 0 {
@@ -29,6 +49,7 @@ func ProviderCreateChannel(r *ghttp.Request) {
 		r.Response.WriteStatusExit(400, map[string]any{"code": 400, "message": "invalid params: " + err.Error()})
 		return
 	}
+	in.SourceType = "provider"
 	in.CreatedByUserID = userID
 	out, err := service.LLM().CreateChannel(r.Context(), in)
 	if err != nil {
@@ -68,6 +89,7 @@ func ProviderListModels(r *ghttp.Request) {
 		r.Response.WriteStatusExit(400, map[string]any{"code": 400, "message": "invalid params: " + err.Error()})
 		return
 	}
+	in.ProviderUserID = userID
 	list, total, err := service.LLM().ListModelSpecs(r.Context(), in)
 	if err != nil {
 		r.Response.WriteStatusExit(500, map[string]any{"code": 500, "message": err.Error()})
@@ -186,3 +208,4 @@ func ProviderTriggerKeyModelTest(r *ghttp.Request) {
 	}
 	r.Response.WriteJson(map[string]any{"ok": true})
 }
+

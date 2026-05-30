@@ -16,7 +16,20 @@ import (
 	"github.com/gogf/gf/v2/frame/g"
 )
 
-const protocolOpenAICompatible = "openai-compatible"
+const (
+	protocolOpenAICompatible   = "openai-compatible"
+	protocolAnthropicCompatible = "anthropic-compatible"
+	protocolGeminiCompatible   = "gemini-compatible"
+	protocolAzureOpenAI        = "azure-openai"
+)
+
+// supportedProtocols lists all protocols in priority order for base URL extraction.
+var supportedProtocols = []string{
+	protocolOpenAICompatible,
+	protocolAnthropicCompatible,
+	protocolGeminiCompatible,
+	protocolAzureOpenAI,
+}
 
 // scheduledKeyModel is the resolved candidate selected for a proxy call.
 type scheduledKeyModel struct {
@@ -141,29 +154,9 @@ func loadCandidates(ctx context.Context, modelSpecID int64) ([]candidateRow, err
 		if r.KMQuotaLimit > 0 && r.KMQuotaUsed >= r.KMQuotaLimit {
 			continue
 		}
-		// Channel must support openai-compatible.
-		if !channelSupportsOpenAI(r.ProtocolsJson) {
-			continue
-		}
 		out = append(out, r)
 	}
 	return out, nil
-}
-
-// channelSupportsOpenAI returns true when the channel's protocols_json contains
-// the openai-compatible key. The expected shape is an object keyed by protocol
-// name, e.g. {"openai-compatible": {"base_url": "https://..."}} — matching the
-// allowedProtocolKeys validation in channel.go and the extractBaseURL contract.
-func channelSupportsOpenAI(protocolsJson string) bool {
-	if protocolsJson == "" {
-		return false
-	}
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal([]byte(protocolsJson), &obj); err != nil {
-		return false
-	}
-	_, ok := obj[protocolOpenAICompatible]
-	return ok
 }
 
 // pickRandomKeyModel resolves the model spec, gathers active candidates, and returns one at random.
@@ -207,8 +200,7 @@ func pickRandomKeyModel(ctx context.Context, modelCode string, capability string
 }
 
 // extractBaseURL pulls the upstream base URL from the channel's protocols_json.
-// Convention: {"openai-compatible": {"base_url": "https://..."}}.
-// Falls back to a top-level "base_url" string field.
+// Tries all known protocol keys in priority order.
 func extractBaseURL(protocolsJson string) (string, error) {
 	if protocolsJson == "" {
 		return "", gerror.New("channel protocols_json is empty")
@@ -217,19 +209,33 @@ func extractBaseURL(protocolsJson string) (string, error) {
 	if err := json.Unmarshal([]byte(protocolsJson), &obj); err != nil {
 		return "", gerror.Wrap(err, "channel protocols_json is not a JSON object")
 	}
-	if raw, ok := obj[protocolOpenAICompatible]; ok {
-		var inner struct {
-			BaseURL string `json:"base_url"`
-		}
-		if err := json.Unmarshal(raw, &inner); err == nil && inner.BaseURL != "" {
-			return inner.BaseURL, nil
+	// Try each known protocol in priority order.
+	for _, proto := range supportedProtocols {
+		if raw, ok := obj[proto]; ok {
+			var inner struct {
+				BaseURL string `json:"base_url"`
+			}
+			if err := json.Unmarshal(raw, &inner); err == nil && inner.BaseURL != "" {
+				return inner.BaseURL, nil
+			}
 		}
 	}
+	// Fallback: top-level "base_url" string.
 	if raw, ok := obj["base_url"]; ok {
 		var s string
 		if err := json.Unmarshal(raw, &s); err == nil && s != "" {
 			return s, nil
 		}
+	}
+	// Fallback: first entry's base_url.
+	for _, entry := range obj {
+		var inner struct {
+			BaseURL string `json:"base_url"`
+		}
+		if err := json.Unmarshal(entry, &inner); err == nil && inner.BaseURL != "" {
+			return inner.BaseURL, nil
+		}
+		break
 	}
 	return "", gerror.New("channel base_url not configured")
 }
@@ -278,7 +284,7 @@ func (s *sLLM) proxyOpenAI(ctx context.Context, in dto.OpenAIProxyRequest, path,
 	}
 
 	// 4. Decrypt upstream key.
-	apiKey, err := decryptKey(scheduled.KeyEncrypted)
+	apiKey, err := decryptKey(ctx, scheduled.KeyEncrypted)
 	if err != nil {
 		return nil, gerror.Wrapf(err, "decrypt key failed for model_key_id=%d", scheduled.ModelKeyID)
 	}
@@ -338,7 +344,7 @@ func (s *sLLM) proxyOpenAI(ctx context.Context, in dto.OpenAIProxyRequest, path,
 
 	// 9. Success: normalize usage and compute cost.
 	usage := normalizeOpenAIUsage(respBody)
-	var price modelPriceRow
+	var price struct { CacheHitPricePer1K int64; CacheMissPricePer1K int64; OutputPricePer1K int64 }
 	err = g.DB().Model("llm_model_prices").Ctx(ctx).
 		Where("model_spec_id", scheduled.ModelSpecID).
 		Where("capability", capability).
@@ -349,7 +355,7 @@ func (s *sLLM) proxyOpenAI(ctx context.Context, in dto.OpenAIProxyRequest, path,
 	}
 
 	var cost, revenue, commission int64
-	if price.ID == 0 {
+	if price.CacheHitPricePer1K == 0 && price.CacheMissPricePer1K == 0 && price.OutputPricePer1K == 0 {
 		g.Log().Warningf(ctx, "no active price for model_spec_id=%d capability=%s; settling with zero cost",
 			scheduled.ModelSpecID, capability)
 	} else {

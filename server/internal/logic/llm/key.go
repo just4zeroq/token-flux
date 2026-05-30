@@ -11,15 +11,27 @@ import (
 
 	"ai-platform/internal/model/dto"
 
+	"github.com/gogf/gf/v2/database/gdb"
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
 )
 
-func encryptKey(plaintext string) (string, error) {
-	hexKey := os.Getenv("MODEL_KEY_ENCRYPTION_KEY")
-	if hexKey == "" {
+func getEncryptionKey(ctx context.Context) (string, error) {
+	key := g.Cfg().MustGet(ctx, "modelKey.encryptionKey").String()
+	if key == "" {
+		key = os.Getenv("MODEL_KEY_ENCRYPTION_KEY")
+	}
+	if key == "" {
 		return "", gerror.New("MODEL_KEY_ENCRYPTION_KEY not set")
+	}
+	return key, nil
+}
+
+func encryptKey(ctx context.Context, plaintext string) (string, error) {
+	hexKey, err := getEncryptionKey(ctx)
+	if err != nil {
+		return "", err
 	}
 	key, err := hex.DecodeString(hexKey)
 	if err != nil {
@@ -41,10 +53,15 @@ func encryptKey(plaintext string) (string, error) {
 	return hex.EncodeToString(ciphertext), nil
 }
 
-func decryptKey(ciphertextHex string) (string, error) {
-	hexKey := os.Getenv("MODEL_KEY_ENCRYPTION_KEY")
-	if hexKey == "" {
-		return "", gerror.New("MODEL_KEY_ENCRYPTION_KEY not set")
+func decryptKey(ctx context.Context, ciphertextHex string) (string, error) {
+	return DecryptKey(ctx, ciphertextHex)
+}
+
+// DecryptKey is the exported version for use by the relay handler.
+func DecryptKey(ctx context.Context, ciphertextHex string) (string, error) {
+	hexKey, err := getEncryptionKey(ctx)
+	if err != nil {
+		return "", err
 	}
 	key, err := hex.DecodeString(hexKey)
 	if err != nil {
@@ -108,7 +125,6 @@ func (r *modelKeyRow) toDTO() *dto.LLMModelKeyInfo {
 		ChannelID:         r.ChannelID,
 		Name:              r.Name,
 		KeyMasked:         r.KeyMasked,
-		QuotaLimitCredits: r.QuotaLimitCredits,
 		QuotaUsedCredits:  r.QuotaUsedCredits,
 		Status:            r.Status,
 		LastTestStatus:    r.LastTestStatus,
@@ -137,33 +153,121 @@ func (s *sLLM) CreateModelKey(ctx context.Context, providerUserID int64, in dto.
 		return nil, gerror.New("channel is not active")
 	}
 
-	encrypted, err := encryptKey(in.Key)
+	encrypted, err := encryptKey(ctx, in.Key)
 	if err != nil {
 		return nil, err
 	}
 	masked := maskKey(in.Key)
 
-	result, err := g.DB().Model("llm_model_keys").Ctx(ctx).Data(g.Map{
-		"provider_user_id":    providerUserID,
-		"channel_id":          in.ChannelID,
-		"name":                in.Name,
-		"key_encrypted":       encrypted,
-		"key_masked":          masked,
-		"quota_limit_credits": in.QuotaLimitCredits,
-		"status":              "pending",
+	var info *dto.LLMModelKeyInfo
+	err = g.DB().Transaction(ctx, func(ctx context.Context, tx gdb.TX) error {
+		// 1. Insert model key.
+		result, err := tx.Model("llm_model_keys").Data(g.Map{
+			"provider_user_id":    providerUserID,
+			"channel_id":          in.ChannelID,
+			"name":                in.Name,
+			"key_encrypted":       encrypted,
+			"key_masked":          masked,
+			"status":              "pending",
+		}).Insert()
+		if err != nil {
+			return gerror.Wrap(err, "insert model key failed")
+		}
+		keyID, _ := result.LastInsertId()
+
+		// 2. Look up provider default share_bps.
+		defaultShareBps, _ := getProviderShareBpsTx(ctx, tx, providerUserID)
+		if defaultShareBps == 0 {
+			defaultShareBps = 7000
+		}
+
+		// 3. Process each binding: upsert prices + bind model.
+		for _, b := range in.ModelBindings {
+			// Verify model spec exists.
+			var msRow modelSpecRow
+			if err := tx.Model("llm_model_specs").Where("id", b.ModelSpecID).Scan(&msRow); err != nil {
+				return gerror.Wrap(err, "query model spec failed")
+			}
+			if msRow.ID == 0 {
+				return gerror.Newf("model spec %d not found", b.ModelSpecID)
+			}
+
+
+			// Bind model to key.
+			bindStatus := "pending_model_review"
+			if msRow.Status == "active" {
+				bindStatus = "pending_test"
+			}
+			_, err = tx.Model("llm_model_key_models").Data(g.Map{
+				"model_key_id":        keyID,
+				"model_spec_id":       b.ModelSpecID,
+				"upstream_model_name": b.UpstreamModelName,
+				"quota_limit_credits": 0,
+				"provider_share_bps":  defaultShareBps,
+				"status":              bindStatus,
+				"cache_hit_price_per_1k":  b.CacheHitPricePer1K,
+				"cache_miss_price_per_1k": b.CacheMissPricePer1K,
+				"output_price_per_1k":    b.OutputPricePer1K,
+			}).Insert()
+			if err != nil {
+				return gerror.Wrap(err, "insert key model binding failed")
+			}
+		}
+
+		// 4. Return created key.
+		var row modelKeyRow
+		if err := tx.Model("llm_model_keys").Where("id", keyID).Scan(&row); err != nil {
+			return gerror.Wrap(err, "query created model key failed")
+		}
+		info = row.toDTO()
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return info, nil
+}
+
+// getProviderShareBpsTx looks up the provider's default share_bps within a transaction.
+func getProviderShareBpsTx(ctx context.Context, tx gdb.TX, userID int64) (int, error) {
+	var row struct {
+		ShareBps int `json:"share_bps"`
+	}
+	err := tx.Model("provider_settings").Where("user_id", userID).Scan(&row)
+	if err != nil {
+		return 0, gerror.Wrap(err, "query provider settings failed")
+	}
+	return row.ShareBps, nil
+}
+
+func (s *sLLM) GetProviderShareBps(ctx context.Context, userID int64) (int, error) {
+	var row struct {
+		ShareBps int `json:"share_bps"`
+	}
+	err := g.DB().Model("provider_settings").Ctx(ctx).Where("user_id", userID).Scan(&row)
+	if err != nil {
+		return 0, gerror.Wrap(err, "query provider settings failed")
+	}
+	if row.ShareBps == 0 {
+		return 7000, nil
+	}
+	return row.ShareBps, nil
+}
+
+func (s *sLLM) SetProviderShareBps(ctx context.Context, userID int64, shareBps int) error {
+	_, err := g.DB().Model("provider_settings").Ctx(ctx).Data(g.Map{
+		"user_id":   userID,
+		"share_bps": shareBps,
 	}).Insert()
 	if err != nil {
-		return nil, gerror.Wrap(err, "insert model key failed")
+		// Duplicate key — update instead.
+		_, err = g.DB().Model("provider_settings").Ctx(ctx).
+			Where("user_id", userID).
+			Data(g.Map{"share_bps": shareBps}).Update()
 	}
-
-	id, _ := result.LastInsertId()
-	var row modelKeyRow
-	err = g.DB().Model("llm_model_keys").Ctx(ctx).Where("id", id).Scan(&row)
-	if err != nil {
-		return nil, gerror.Wrap(err, "query created model key failed")
-	}
-	return row.toDTO(), nil
+	return gerror.Wrap(err, "set provider share_bps failed")
 }
+
 
 func (s *sLLM) ListModelKeys(ctx context.Context, in dto.LLMListModelKeysIn) ([]*dto.LLMModelKeyInfo, int, error) {
 	page := in.Page
@@ -236,6 +340,9 @@ type keyModelRow struct {
 	QuotaLimitCredits   int64       `json:"quota_limit_credits"`
 	QuotaUsedCredits    int64       `json:"quota_used_credits"`
 	ProviderShareBps    int         `json:"provider_share_bps"`
+	CacheHitPricePer1K  int64       `json:"cache_hit_price_per_1k"`
+		CacheMissPricePer1K int64       `json:"cache_miss_price_per_1k"`
+		OutputPricePer1K    int64       `json:"output_price_per_1k"`
 	Status              string      `json:"status"`
 	TestAttempts        int         `json:"test_attempts"`
 	LastTestAt          *gtime.Time `json:"last_test_at"`
@@ -255,10 +362,11 @@ func (r *keyModelRow) toDTO() *dto.LLMKeyModelInfo {
 		ModelKeyID:          r.ModelKeyID,
 		ModelSpecID:         r.ModelSpecID,
 		UpstreamModelName:   r.UpstreamModelName,
-		QuotaLimitCredits:   r.QuotaLimitCredits,
 		QuotaUsedCredits:    r.QuotaUsedCredits,
-		ProviderShareBps:    r.ProviderShareBps,
 		Status:              r.Status,
+		CacheHitPricePer1K:  r.CacheHitPricePer1K,
+			CacheMissPricePer1K: r.CacheMissPricePer1K,
+			OutputPricePer1K:    r.OutputPricePer1K,
 		ConsecutiveFailures: r.ConsecutiveFailures,
 		LastErrorCode:       r.LastErrorCode,
 		LastErrorMessage:    r.LastErrorMessage,
@@ -277,7 +385,7 @@ func (s *sLLM) BindKeyModel(ctx context.Context, providerUserID int64, in dto.LL
 	if mkRow.ID == 0 {
 		return nil, gerror.New("model key not found")
 	}
-	if mkRow.Status != "active" {
+	if mkRow.Status != "active" && mkRow.Status != "pending" {
 		return nil, gerror.New("model key is not active")
 	}
 	if mkRow.ProviderUserID != providerUserID {
@@ -294,6 +402,9 @@ func (s *sLLM) BindKeyModel(ctx context.Context, providerUserID int64, in dto.LL
 		return nil, gerror.New("model spec not found")
 	}
 
+	// Look up provider default share_bps.
+	defaultShareBps, _ := s.GetProviderShareBps(ctx, providerUserID)
+
 	// Determine status: if model spec is active, set pending_test; otherwise pending_model_review.
 	bindStatus := "pending_model_review"
 	if msRow.Status == "active" {
@@ -304,9 +415,12 @@ func (s *sLLM) BindKeyModel(ctx context.Context, providerUserID int64, in dto.LL
 		"model_key_id":        in.ModelKeyID,
 		"model_spec_id":       in.ModelSpecID,
 		"upstream_model_name": in.UpstreamModelName,
-		"quota_limit_credits": in.QuotaLimitCredits,
-		"provider_share_bps":  in.ProviderShareBps,
+		"quota_limit_credits": 0,
+		"provider_share_bps":  defaultShareBps,
 		"status":              bindStatus,
+				"cache_hit_price_per_1k":  in.CacheHitPricePer1K,
+				"cache_miss_price_per_1k": in.CacheMissPricePer1K,
+				"output_price_per_1k":    in.OutputPricePer1K,
 	}).Insert()
 	if err != nil {
 		return nil, gerror.Wrap(err, "insert key model binding failed")
@@ -348,7 +462,6 @@ func (s *sLLM) ListKeyModels(ctx context.Context, in dto.LLMListKeyModelsIn) ([]
 		model = model.
 			InnerJoin("llm_model_keys", "llm_model_key_models.model_key_id = llm_model_keys.id").
 			Where("llm_model_keys.provider_user_id", in.ProviderUserID)
-		// Need to qualify columns to avoid ambiguity.
 		model = model.Fields("llm_model_key_models.*")
 	}
 
@@ -371,25 +484,78 @@ func (s *sLLM) ListKeyModels(ctx context.Context, in dto.LLMListKeyModelsIn) ([]
 }
 
 func (s *sLLM) TriggerKeyModelTest(ctx context.Context, keyModelID int64) error {
+	// Look up key model binding.
 	var kmRow keyModelRow
-	err := g.DB().Model("llm_model_key_models").Ctx(ctx).Where("id", keyModelID).Scan(&kmRow)
-	if err != nil {
+	if err := g.DB().Model("llm_model_key_models").Ctx(ctx).Where("id", keyModelID).Scan(&kmRow); err != nil {
 		return gerror.Wrap(err, "query key model binding failed")
 	}
 	if kmRow.ID == 0 {
 		return gerror.New("key model binding not found")
 	}
 
-	_, err = g.DB().Model("llm_model_key_models").Ctx(ctx).
+	// Look up model key for upstream key.
+	var mkRow modelKeyRow
+	if err := g.DB().Model("llm_model_keys").Ctx(ctx).Where("id", kmRow.ModelKeyID).Scan(&mkRow); err != nil {
+		return gerror.Wrap(err, "query model key failed")
+	}
+	if mkRow.ID == 0 {
+		return gerror.New("model key not found")
+	}
+
+	// Decrypt upstream API key.
+	upstreamKey, err := decryptKey(ctx, mkRow.KeyEncrypted)
+	if err != nil {
+		return gerror.Wrap(err, "decrypt upstream key failed")
+	}
+
+	// Look up channel for base URL.
+	var chRow channelRow
+	if err := g.DB().Model("llm_channels").Ctx(ctx).Where("id", mkRow.ChannelID).Scan(&chRow); err != nil {
+		return gerror.Wrap(err, "query channel failed")
+	}
+	if chRow.ID == 0 {
+		return gerror.New("channel not found")
+	}
+
+	// Extract base URL from protocols_json.
+	baseURL, err := extractBaseURL(chRow.ProtocolsJson)
+	if err != nil {
+		return gerror.Wrap(err, "extract base URL failed")
+	}
+
+	// Make test call to upstream /v1/models.
+	statusCode, body, _, err := proxyOpenAICompatible(ctx, baseURL, upstreamKey, "/v1/models", nil)
+	if err == nil && statusCode >= 200 && statusCode < 300 {
+		// Success: update test status.
+		_, _ = g.DB().Model("llm_model_key_models").Ctx(ctx).
+			Where("id", keyModelID).
+			Data(g.Map{
+				"last_test_status":    "success",
+				"consecutive_failures": 0,
+				"test_attempts":       gdb.Raw("test_attempts + 1"),
+				"last_test_at":        gtime.Now(),
+			}).Update()
+		return nil
+	}
+
+	// Failure: capture error.
+	errMsg := "unknown"
+	if err != nil {
+		errMsg = err.Error()
+	} else {
+		errMsg = string(body)
+		if len(errMsg) > 500 {
+			errMsg = errMsg[:500]
+		}
+	}
+	_, _ = g.DB().Model("llm_model_key_models").Ctx(ctx).
 		Where("id", keyModelID).
 		Data(g.Map{
-			"test_attempts":       0,
-			"last_test_status":    "pending",
-			"consecutive_failures": 0,
-			"next_test_at":        gtime.Now(),
+			"last_test_status":     "failed",
+			"last_test_error":      errMsg,
+			"consecutive_failures": gdb.Raw("consecutive_failures + 1"),
+			"test_attempts":        gdb.Raw("test_attempts + 1"),
+			"last_test_at":         gtime.Now(),
 		}).Update()
-	if err != nil {
-		return gerror.Wrap(err, "trigger key model test failed")
-	}
-	return nil
+	return gerror.Newf("test failed: %s", errMsg)
 }

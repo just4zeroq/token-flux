@@ -12,6 +12,12 @@ type ISettlement interface {
 	SubmitAndSettle(ctx context.Context, in dto.SettlementSubmitIn) (*dto.TransactionInfo, error)
 	CreateRecharge(ctx context.Context, in dto.RechargeSettlementIn) (*dto.TransactionInfo, error)
 	RestoreOverdraftKeys(ctx context.Context, userID int64) error
+
+	// Admin
+	ListSettlements(ctx context.Context, status, productType string, page, pageSize int) ([]*dto.SettlementRecordInfo, int, error)
+
+	// Provider
+	GetProviderStats(ctx context.Context, providerUserID int64) (*dto.ProviderSettlementStats, error)
 }
 
 var localSettlement ISettlement

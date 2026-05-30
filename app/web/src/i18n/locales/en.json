@@ -1,0 +1,185 @@
+{
+  "translation": {
+    "nav": {
+      "home": "Home",
+      "models": "Models",
+      "providers": "Providers",
+      "console": "Console",
+      "login": "Login",
+      "register": "Register",
+      "logout": "Logout",
+      "profile": "Profile",
+      "backToHome": "Back to Home"
+    },
+    "home": {
+      "hero": {
+        "badge": "Platform v2.0 — Now Available",
+        "title": "Build the Next Generation of ",
+        "titleHighlight": "AI Applications",
+        "subtitle": "API key hosting, model gateway, MCP protocol, and double-entry settlement — everything you need to ship LLM-powered products.",
+        "cta": "Get Started Free",
+        "viewModels": "View Models →",
+        "stats": {
+          "models": "Models",
+          "uptime": "Uptime",
+          "developers": "Developers"
+        },
+        "statusCard": "API Status — All Systems Operational",
+        "avgLatency": "Avg Latency",
+        "latencyValue": "< 200ms",
+        "availableModels": "Available Models",
+        "startingCredits": "Starting Credits",
+        "startingCreditsValue": "Free",
+        "support": "Support",
+        "supportValue": "24/7"
+      },
+      "capabilities": {
+        "title": "Everything You Need",
+        "subtitle": "One platform. All the tools to build with LLMs.",
+        "items": {
+          "llmKeys": { "title": "LLM API Keys", "desc": "Host & manage API keys for 50+ LLM providers with granular access control." },
+          "mcpGateway": { "title": "MCP Gateway", "desc": "Standardized Model Context Protocol gateway for seamless provider integration." },
+          "agentRuntime": { "title": "Agent Runtime", "desc": "Deploy & scale autonomous agents with built-in monitoring & logging." },
+          "ledger": { "title": "Double-Entry Ledger", "desc": "Immutable settlement system with automatic reconciliation & audit trails." },
+          "payment": { "title": "Alipay & WeChat Pay", "desc": "Integrated Chinese payment gateways for frictionless credit recharges." },
+          "console": { "title": "Developer Console", "desc": "Real-time dashboard for usage metrics, key rotation & team management." }
+        }
+      },
+      "featured": {
+        "title": "Featured Models",
+        "subtitle": "Browse popular models to get started.",
+        "viewAll": "View All →"
+      },
+      "cta": {
+        "title": "Ready to Ship?",
+        "subtitle": "Get 100 free credits on signup. No credit card required.",
+        "button": "Create Free Account",
+        "note": "Free tier includes 100 credits. No commitment. Cancel anytime."
+      }
+    },
+    "models": {
+      "title": "Model Factory",
+      "subtitle": "Browse and compare available LLM models.",
+      "search": "Search by model name, code, or developer...",
+      "loading": "Loading...",
+      "noResults": "No models found",
+      "noResultsHint": "Try adjusting your search or filters.",
+      "resultCount": "{{count}} model",
+      "resultCount_plural": "{{count}} models",
+      "found": "found",
+      "filter": {
+        "clearAll": "Clear all {{count}} filter",
+        "clearAll_plural": "Clear all {{count}} filters",
+        "developer": "Developer",
+        "contextWindow": "Context Window",
+        "capabilities": "Capabilities",
+        "all": "All"
+      },
+      "detail": {
+        "tryInConsole": "Try in Console",
+        "inputPrice": "Input /1K",
+        "outputPrice": "Output /1K",
+        "cacheHitPrice": "Cache hit /1K",
+        "availableProviders": "Available Providers",
+        "noProviders": "No providers available for this model yet.",
+        "notFound": "Model not found",
+        "backToModels": "← Back to Models"
+      }
+    },
+    "providers": {
+      "title": "Providers",
+      "loading": "Loading...",
+      "count": "{{count}} providers on the platform",
+      "search": "Search providers...",
+      "searchButton": "Search",
+      "noResults": "No providers found",
+      "noResultsHint": "Try adjusting your search.",
+      "applyAsProvider": "Apply as Provider",
+      "sort": {
+        "modelCount": "Model Count",
+        "callVolume": "Call Volume",
+        "reputation": "Reputation"
+      },
+      "card": {
+        "models": "Models",
+        "calls": "Calls",
+        "tokens": "Tokens"
+      },
+      "detail": {
+        "backToProviders": "← Providers",
+        "notFound": "Provider not found",
+        "stats": {
+          "models": "Models",
+          "totalCalls": "Total Calls",
+          "totalTokens": "Total Tokens"
+        },
+        "modelsTitle": "Models",
+        "noModels": "No models available."
+      }
+    },
+    "console": {
+      "overview": "Overview",
+      "welcomeBack": "Welcome back, {{name}}",
+      "credits": "Credits",
+      "wallet": "Wallet Balance",
+      "points": "Points",
+      "activeKeys": "Active API Keys",
+      "recharge": "+ Recharge",
+      "revenue": "Revenue",
+      "totalRevenue": "Total Revenue",
+      "commission": "Commission",
+      "settlements": "Settlements",
+      "models": "Models",
+      "pendingRevenue": "Pending Revenue",
+      "pendingSettlements": "Pending Settlements",
+      "recentUsage": "Recent Usage",
+      "viewAll": "View All →",
+      "noUsage": "No usage yet. Start by creating an API key and making a request.",
+      "modelUsageRanking": "Model Usage Ranking",
+      "rankCol": "#",
+      "modelCol": "Model",
+      "callsCol": "Calls",
+      "tokensCol": "Tokens",
+      "creditsCol": "Credits"
+    },
+    "login": {
+      "title": "Login",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Login",
+      "noAccount": "Don't have an account?",
+      "register": "Register"
+    },
+    "register": {
+      "title": "Create Account",
+      "username": "Username",
+      "email": "Email",
+      "password": "Password",
+      "submit": "Create Account",
+      "haveAccount": "Already have an account?",
+      "login": "Login"
+    },
+    "common": {
+      "loading": "Loading...",
+      "error": "Something went wrong",
+      "noData": "No data",
+      "cancel": "Cancel",
+      "save": "Save",
+      "delete": "Delete",
+      "back": "Back",
+      "close": "Close",
+      "search": "Search...",
+      "active": "Active",
+      "inactive": "Inactive",
+      "unknown": "Unknown",
+      "pricing": "Pricing",
+      "capability": "Capability",
+      "input": "Input",
+      "output": "Output",
+      "status": "Status",
+      "contextWindow": "Context Window",
+      "modelFamily": "Family",
+      "modelCode": "Model Code"
+    }
+  }
+}

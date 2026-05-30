@@ -3,11 +3,20 @@
 package main
 
 import (
+	"os"
+
 	_ "ai-platform/internal/logic"
 
 	"ai-platform/internal/boot"
 
 	_ "github.com/gogf/gf/contrib/drivers/pgsql/v2"
+	_ "github.com/gogf/gf/contrib/nosql/redis/v2"
 )
 
-func main() { boot.RunAPI() }
+func main() {
+	server := os.Getenv("AI_SERVER")
+	if server == "" {
+		server = "all"
+	}
+	boot.RunAPI(server)
+}

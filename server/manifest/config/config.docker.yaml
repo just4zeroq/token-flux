@@ -1,0 +1,59 @@
+server:
+  api:
+    address: ":8080"
+  gateway:
+    address: ":8081"
+  admin:
+    apiToken: "${ADMIN_API_TOKEN}"
+
+modelKey:
+  encryptionKey: "${MODEL_KEY_ENCRYPTION_KEY}"
+
+database:
+  default:
+    type: "pgsql"
+    host: "${DB_HOST}"
+    port: "${DB_PORT}"
+    user: "${DB_USER}"
+    pass: "${DB_PASS}"
+    name: "${DB_NAME}"
+    debug: false
+
+logger:
+  level: "info"
+  stdout: true
+
+jwt:
+  secret: "${JWT_SECRET}"
+  expireHours: 24
+
+wallet:
+  hd:
+    mnemonic_env: "WALLET_MNEMONIC"
+  chains:
+    bnb:
+      rpc: "https://bsc-dataseed.binance.org"
+      confirmations: 12
+      poll_interval_seconds: 5
+    base:
+      rpc: "https://mainnet.base.org"
+      confirmations: 12
+      poll_interval_seconds: 5
+    ton:
+      api: "https://toncenter.com/api/v2"
+      confirmations: 1
+      poll_interval_seconds: 5
+
+redis:
+  default:
+    address: "${REDIS_ADDRESS}"
+    db: 0
+    pass: ""
+
+usage:
+  recorder:
+    batch_size: 50
+    flush_interval_ms: 100
+
+settlement:
+  cron: "0 0 3 * * *"

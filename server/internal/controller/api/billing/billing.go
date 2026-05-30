@@ -76,6 +76,16 @@ func DebitAccount(r *ghttp.Request) {
 	r.Response.WriteJson(tx)
 }
 
+func ProviderSettlementStats(r *ghttp.Request) {
+	userID := middleware.GetUserID(r)
+	stats, err := service.Settlement().GetProviderStats(r.Context(), userID)
+	if err != nil {
+		r.Response.WriteStatusExit(400, map[string]any{"code": 400, "message": err.Error()})
+		return
+	}
+	r.Response.WriteJson(stats)
+}
+
 func Recharge(r *ghttp.Request) {
 	userID := middleware.GetUserID(r)
 	var in dto.RechargeCreditsIn

@@ -40,3 +40,12 @@ type SettlementRecordInfo struct {
 	CreatedAt              time.Time `json:"created_at"`
 	SettledAt              time.Time `json:"settled_at,omitzero"`
 }
+
+type ProviderSettlementStats struct {
+	TotalRevenueCredits    int64                  `json:"total_revenue_credits"`
+	TotalCommissionCredits int64                  `json:"total_commission_credits"`
+	TotalSettlements       int                    `json:"total_settlements"`
+	PendingRevenueCredits  int64                  `json:"pending_revenue_credits"`
+	PendingCount           int                    `json:"pending_count"`
+	RecentSettlements      []*SettlementRecordInfo `json:"recent_settlements"`
+}

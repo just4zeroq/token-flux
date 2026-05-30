@@ -2,383 +2,232 @@
 
 ## Project Overview
 
-AI capability platform monorepo. 6 Go services + React SPA + Tauri desktop app.
+AI capability platform (LLM → MCP → Agent). GoFrame v2 monolith serving three HTTP ports. Current phase: LLM API key hosting with double-entry settlement.
 
-## Project Structure
+## Architecture
 
 ```
 ai-platform/
-├── server/               ← Go services + shared infrastructure
-│   ├── api/              ← Shared proto module (.pb.go)
-│   ├── user-svc/         ← gRPC :8100
-│   ├── asset-svc/        ← gRPC :8101
-│   ├── market-svc/       ← gRPC :8102
-│   ├── api-gateway/      ← HTTP :8080
-│   ├── ai-gateway/       ← HTTP :8081
-│   ├── proto/            ← Proto source definitions
-│   ├── scripts/          ← Database init scripts
-│   └── docker/           ← Dockerfiles, compose, entrypoint, migrations
+├── server/                    ← GoFrame monolith
+│   ├── main.go
+│   ├── internal/
+│   │   ├── boot/boot.go       ← starts 3 ghttp.Server instances
+│   │   ├── controller/
+│   │   │   ├── api/           ← :8080 handlers (identity, billing, wallet, payment, provider LLM)
+│   │   │   │   ├── admin/     ← :8082 handlers (user, billing, settlement, invoice, llm, payment)
+│   │   │   │   └── payment/   ← user-facing payment (recharge, orders, notify callbacks)
+│   │   │   └── gateway/       ← :8081 handlers (OpenAI-compatible data-plane)
+│   │   ├── logic/             ← business logic (one package per domain)
+│   │   ├── service/           ← interface definitions + accessors
+│   │   ├── model/dto/         ← request/response DTOs (8 files: billing, identity, invoice, llm, payment, settlement, wallet)
+│   │   └── middleware/        ← JWTAuth, APIKeyAuth, AdminTokenAuth, CORS, Recover, RequestID
+│   ├── migrations/            ← goose SQL migrations (7 files)
+│   ├── manifest/config/       ← GoFrame config YAML
+│   └── scripts/               ← smoke tests
 ├── app/
-│   ├── web/              ← React SPA (Vite)
-│   └── desktop/          ← Tauri desktop app
-├── CLAUDE.md
-└── .gitignore
+│   ├── web/                   ← React SPA (Vite)
+│   └── desktop/               ← Tauri desktop app
+└── docs/design/               ← design documents
 ```
 
-## Module Dependency
+## Three Servers
 
-```
-server/api/     ← shared proto module (compiled .pb.go files)
-│
-├── server/user-svc    → replace api => ../api
-├── server/asset-svc   → replace api => ../api
-├── server/market-svc  → replace api => ../api
-├── server/api-gateway → replace api => ../api
-└── server/ai-gateway  → replace api => ../api
-```
+| Server | Port | Auth | Purpose |
+|--------|------|------|---------|
+| api | :8080 | JWT (HS256) | User + provider endpoints |
+| gateway | :8081 | API Key (sk-xxx) | OpenAI-compatible LLM data-plane |
+| admin | :8082 | Bearer token (env `ADMIN_API_TOKEN`) | Backend management, consumed by gfast UI |
 
-Each service is an independent Go module with its own `go.mod`. Proto-generated code lives in `server/api/` and is shared via `replace` directives.
+### :8080 — API Server (JWT)
 
-## Proto Definitions
+Public: `/api/v1/auth/register`, `/api/v1/auth/verify-email`, `/api/v1/auth/login`
+Public callbacks: `/api/v1/payment/notify/alipay`, `/api/v1/payment/notify/wechat`
+JWT-protected: `/users/me/*`, `/billing/*`, `/wallet/*`, `/payment/recharge`, `/payment/orders`, `/provider/llm/*`
 
-### Source Organization
+Provider routes check `role == dto.RoleProvider` (1) per handler.
 
-```
-server/proto/
-├── user/v1/user.proto        → go_package "ai-platform/api/user/v1;userv1"
-├── asset/v1/asset.proto      → go_package "ai-platform/api/asset/v1;assetv1"
-├── market/v1/market.proto    → go_package "ai-platform/api/market/v1;marketv1"
-└── gateway/v1/gateway.proto   → go_package "ai-platform/api/gateway/v1;gatewayv1"
-```
+### :8081 — Gateway Server (API Key)
 
-Compiled output lands in `api/<svc>/v1/*.pb.go` (shared Go module). All services import from here — never copy proto files into service directories.
+`/v1/models`, `/v1/chat/completions`, `/v1/completions`, `/v1/embeddings`
 
-### Service RPC Definitions
+APIKeyAuth middleware validates `sk-xxx` keys, injects `user_id` + `api_key_id` into ctx.
 
-**user.v1.UserService** (port 8100, gRPC server — `user-svc` owns this)
-```protobuf
-rpc Register(RegisterReq) returns (RegisterRes);
-rpc Login(LoginReq) returns (LoginRes);
-rpc ValidateToken(ValidateTokenReq) returns (ValidateTokenRes);
-rpc CreateApiKey(CreateApiKeyReq) returns (CreateApiKeyRes);
-rpc ListApiKeys(ListApiKeysReq) returns (ListApiKeysRes);
-rpc DeleteApiKey(DeleteApiKeyReq) returns (DeleteApiKeyRes);
-rpc GetUser(GetUserReq) returns (GetUserRes);
-```
-**Import:** `userv1 "api/user/v1"`
-- Server: user-svc implements all RPCs
-- Client: api-gateway (register/login/profile/keys), ai-gateway (ValidateToken)
+### :8082 — Admin Server (Static Token)
 
-**asset.v1.AssetService** (port 8101, gRPC server — `asset-svc` owns this)
-```protobuf
-rpc CreateOrder(CreateOrderReq) returns (CreateOrderRes);
-rpc GetBalance(GetBalanceReq) returns (GetBalanceRes);
-rpc ReportUsage(ReportUsageReq) returns (ReportUsageRes);
-rpc ListTransactions(ListTransactionsReq) returns (ListTransactionsRes);
-```
-**Import:** `assetv1 "api/asset/v1"`
-- Server: asset-svc implements all RPCs
-- Client: api-gateway (balance/transactions), user-svc (GetBalance on registration), ai-gateway (ReportUsage after LLM calls)
+AdminTokenAuth checks `Authorization: Bearer <ADMIN_API_TOKEN>`. No JWT, no session.
 
-**market.v1.MarketService** (port 8102, gRPC server — `market-svc` owns this)
-```protobuf
-rpc CreateListing(CreateListingReq) returns (CreateListingRes);
-rpc ListListings(ListListingsReq) returns (ListListingsRes);
-rpc BuyProduct(BuyProductReq) returns (BuyProductRes);
-rpc ListTrades(ListTradesReq) returns (ListTradesRes);
-```
-**Import:** `marketv1 "api/market/v1"`
+**Admin endpoints:**
+| Category | Routes |
+|----------|--------|
+| Users | `GET/POST /users`, `GET /users/:id`, `PUT /users/:id/status`, `PUT /users/:id/role`, `DELETE /users/:id` |
+| Billing | `GET /accounts`, `GET /balances`, `GET /transactions`, `POST /recharge`, `POST /adjust-balance` |
+| Settlement | `GET /settlements` |
+| Invoice | `GET/POST /invoices`, `GET /invoices/:id`, `PUT /invoices/:id/status` |
+| LLM | `GET/POST /llm/channels`, `PUT /llm/channels/:id/review`, `DELETE /llm/channels/:id`, `GET/POST /llm/models`, `PUT /llm/models/:id/review`, `DELETE /llm/models/:id`, `GET/POST /llm/models/:id/prices`, `GET /llm/model-keys`, `GET /llm/key-models`, `POST /llm/key-models/:id/test` |
+| Payment | `GET/POST /payment/channels`, `PUT /payment/channels/:id`, `GET /payment/orders` |
 
-**gateway.v1.GatewayService** (ai-gateway internal RPC)
-```protobuf
-rpc ValidateKey(ValidateKeyReq) returns (ValidateKeyRes);
-rpc ReportUsage(ReportUsageReq) returns (ReportUsageRes);
-```
-**Import:** `gatewayv1 "api/gateway/v1"`
+**gfast integration:** The admin frontend at `../gfast/` calls these endpoints. Admin response format must match gfast conventions: `{"code": 0, "message": "ok", "data": {...}}` on success, `{"code": -1, "message": "error"}` on failure. Pagination uses `pageNum`/`pageSize` query params, response includes `currentPage`/`total`.
 
-### Cross-Service Dependency Map
+## Domain Modules
 
-```
-user-svc  (8100)  ──gRPC──▶  asset-svc  (GetBalance → auto-create balance)
-api-gateway (8080) ──gRPC──▶  user-svc   (register/login/profile/keys)
-api-gateway (8080) ──gRPC──▶  asset-svc  (balance/transactions)
-ai-gateway  (8081) ──gRPC──▶  user-svc   (ValidateToken/ValidateApiKey)
-ai-gateway  (8081) ──gRPC──▶  asset-svc  (ReportUsage after LLM calls)
-```
+| Domain | Logic Package | Service Interface | Tables |
+|--------|--------------|-------------------|--------|
+| identity | logic/identity/ | IIdentity | users, api_keys, email_verifications |
+| billing | logic/billing/ | IBilling | accounts, transactions, transaction_entries |
+| settlement | logic/settlement/ | ISettlement | settlement_records |
+| llm | logic/llm/ | ILLM | llm_channels, llm_model_specs, llm_model_prices, llm_model_keys, llm_model_key_models, llm_usage_records |
+| wallet | logic/wallet/ | IWallet | deposit_addresses, chain_deposits, withdraw_requests |
+| gateway | logic/gateway/ | IGatewayAgent, IGatewayMcp | (no own tables) |
+| invoice | logic/invoice/ | IInvoice | invoices |
+| payment | logic/payment/ | IPayment | payment_channels, payment_orders |
 
-### Import Naming Convention
+## Service Registration Pattern
 
-| proto source | Go package | Import path | Alias |
-|---|---|---|---|
-| `user/v1/user.proto` | `userv1` | `"api/user/v1"` | `userv1` |
-| `asset/v1/asset.proto` | `assetv1` | `"api/asset/v1"` | `assetv1` |
-| `market/v1/market.proto` | `marketv1` | `"api/market/v1"` | `marketv1` |
-| `gateway/v1/gateway.proto` | `gatewayv1` | `"api/gateway/v1"` | `gatewayv1` |
-
-In code, always use the proto-shortened import alias to avoid conflicts with GoFrame API structs in api-gateway:
+Each logic package registers itself via `init()`:
 
 ```go
-import (
-    assetv1 "api/asset/v1"    // proto types (messages, client, server interfaces)
-    userv1 "api/user/v1"
-)
-
-// Register gRPC server
-assetv1.RegisterAssetServiceServer(s, &asset.Controller{svc: svc})
-
-// Call gRPC client
-pbRes, err := grpcclient.UserSvc.GetUser(ctx, &userv1.GetUserReq{UserId: id})
+// internal/logic/llm/llm.go
+type sLLM struct{}
+func init() { service.RegisterLLM(New()) }
+func New() *sLLM { return &sLLM{} }
 ```
 
-### Adding a New Proto
+Service interfaces in `internal/service/` with package-level accessor:
 
-1. Create `server/proto/<svc>/v1/<svc>.proto` with `package <svc>.v1` and `go_package "ai-platform/api/<svc>/v1;<svc>v1"`
-2. Run protoc from repo root:
-   ```bash
-   protoc --go_out=. --go-grpc_out=. server/proto/<svc>/v1/<svc>.proto
-   ```
-3. Add database setup in `scripts/init-db.sh` if new service
-4. Import in any service via `api/<svc>/v1`
-
-### Updating an Existing Proto
-
-1. Edit `server/proto/<svc>/v1/<svc>.proto`
-2. Re-generate:
-   ```bash
-   protoc --go_out=. --go-grpc_out=. server/proto/<svc>/v1/<svc>.proto
-   ```
-3. Rebuild dependent services:
-   ```bash
-   cd server/<svc> && go build ./...
-   ```
-
-## Development Commands
-
-```bash
-# Go services (all paths relative to server/)
-cd server/<service-dir> && go build ./...
-cd server/<service-dir> && go run .          # start service
-
-# Web frontend
-cd app/web && npm install && npm run dev     # start Vite dev server
-
-# Database (PostgreSQL 16)
-bash server/scripts/init-db.sh               # create databases (local)
+```go
+// internal/service/llm.go
+type ILLM interface { ... }
+var localLLM ILLM
+func RegisterLLM(i ILLM) { localLLM = i }
+func LLM() ILLM { return localLLM }  // panics if not registered
 ```
 
-## Docker
+All logic packages are blank-imported in `logic/logic.go` so `init()` runs on startup.
 
-Dockerfiles are in `server/docker/`. Per-service compose files in each service root for independent deployment.
+## Database
 
-**Config approach:** Each Docker image bakes the original `manifest/config/config.yaml`. At container startup, `docker/entrypoint.sh` substitutes hostnames from environment variables — no config copies needed.
+PostgreSQL 16. Single database. Migrations managed by [Goose](https://github.com/pressly/goose).
 
-```bash
-# One-click build & start (top-level, all services)
-cd server/docker && bash start.sh
+### Migrations (7 files)
 
-# Per-service (standalone, each includes its own postgres):
-cd server/user-svc && docker compose up -d       # postgres + user-svc + asset-svc
-cd server/asset-svc && docker compose up -d      # postgres + asset-svc
-cd server/market-svc && docker compose up -d     # postgres + market-svc
-cd server/api-gateway && docker compose up -d    # postgres + user-svc + asset-svc + api-gateway
-cd server/ai-gateway && docker compose up -d     # postgres + user-svc + asset-svc + ai-gateway
+| File | Tables |
+|------|--------|
+| 0001_identity.sql | users, api_keys, email_verifications |
+| 0002_wallet.sql | deposit_addresses, chain_deposits, withdraw_requests |
+| 0003_billing.sql | accounts, transactions, transaction_entries |
+| 0004_llm.sql | llm_channels, llm_model_specs, llm_model_prices, llm_model_keys, llm_model_key_models, llm_usage_records |
+| 0005_settlement.sql | settlement_records |
+| 0006_invoices.sql | invoices |
+| 0007_payment.sql | payment_channels, payment_orders |
+
+### Key Design Decisions
+
+- **No FK constraints** — all reference columns are plain BIGINT, defaults to 0
+- **Soft delete** — api_keys uses `deleted_at` (GoFrame auto-filters)
+- **Role in users table** — `role` INT, `0` = user, `1` = provider (constants in `dto/identity.go`)
+- **No admin role** — admin is a separate server with static token, not a user role
+- **Optimistic locking** — `accounts.version` column, no retry loop (conflicts propagate to caller)
+- **Idempotent settlement** — `settlement_records` UNIQUE(ref_type, ref_id); INSERT first, SELECT on conflict
+- **AES-GCM key encryption** — `llm_model_keys.key_encrypted`, env var `MODEL_KEY_ENCRYPTION_KEY` (hex-encoded 32-byte)
+
+### Account Assets
+
+| Asset | Meaning | Accounting |
+|-------|---------|------------|
+| credits | Paid credit balance | Double-entry, balanced per tx |
+| points | Loyalty/reward points | One-sided grant, not balanced |
+| balance | Deposit balance (wallet) | Double-entry |
+
+## LLM Management Chain
+
+```
+provider (user, role=1)
+  → llm_channels        (protocol config, e.g. openai-compatible base_url)
+    → llm_model_keys      (encrypted upstream API key)
+      → llm_model_key_models (key ↔ model_spec binding, upstream_model_name, provider_share_bps)
 ```
 
-**Env vars available** (set in docker-compose `environment:`):
-| Variable | Default | Override in Docker |
-|----------|---------|-------------------|
-| `DB_HOST` | `localhost` → `postgres` | Database server hostname |
-| `USER_SVC_ADDR` | `localhost:8100` → `user-svc:8100` | user-svc gRPC address |
-| `ASSET_SVC_ADDR` | `localhost:8101` → `asset-svc:8101` | asset-svc gRPC address |
-
-## Database Migrations
-
-Uses [Goose](https://github.com/pressly/goose) for SQL migrations. Migration files in `server/<svc>/migrations/`.
-
-```bash
-# Install goose CLI
-go install github.com/pressly/goose/v3/cmd/goose@latest
-
-# Run all migrations (needs postgres running)
-cd server/docker && bash migrate.sh
-
-# Or per service:
-goose -dir server/user-svc/migrations postgres "postgres://aiplatform:aiplatform@localhost:5432/user_svc?sslmode=disable" up
+```
+admin (via :8082)
+  → llm_channels        (create + review → active)
+    → llm_model_specs     (create + review → active)
+      → llm_model_prices   (per-capability pricing)
 ```
 
-Available migrations:
-- `user-svc/migrations/` — users, api_keys
-- `asset-svc/migrations/` — balances, transactions, usage_records, orders
-- `ai-gateway/migrations/` — channels, abilities
-- `market-svc/migrations/` — (empty, pending implementation)
+## LLM Settlement Flow
 
-## DAO Code Generation
+```
+User request → /v1/chat/completions (sk-xxx key)
+  → APIKeyAuth: resolve user_id + api_key_id
+  → pickRandomKeyModel: join key_models + keys + channels, filter active, random select
+  → decryptKey: AES-GCM decrypt upstream key
+  → extractBaseURL: parse protocols_json
+  → proxyOpenAICompatible: call upstream OpenAI API
+  → on success:
+    → INSERT llm_usage_records (tokens, cost, revenue, commission)
+    → SubmitAndSettle: settlement_records INSERT (idempotent)
+      → postLedger: accounts UPDATE (optimistic lock) + transactions + transaction_entries
+    → Quota tracking: UPDATE llm_model_keys.quota_used_credits, llm_model_key_models.quota_used_credits
+    → Overdraft check: if balance < 0, UPDATE api_keys SET status=0, disabled_reason='overdraft'
+  → on failure:
+    → INSERT llm_usage_records (status='failed', error_code, error_message)
+    → No settlement attempted
+  → on settlement failure:
+    → Mark usage record status='settlement_pending' for recovery
+    → Still bump quotas (provider did the work)
+    → Skip overdraft check (balance wasn't actually changed)
+```
 
-GoFrame `gf gen dao` generates type-safe DAO/DO/Entity code from database tables. Each service's `server/<svc>/hack/config.yaml` now points to PostgreSQL.
+## Payment Flow
 
-**Workflow:**
-1. Start PostgreSQL, run migrations (tables must exist)
-2. Generate code:
-   ```bash
-   cd server/user-svc && gf gen dao
-   ```
-3. Output: `server/<svc>/internal/dao/`, `server/<svc>/internal/model/do/`, `server/<svc>/internal/model/entity/`
+```
+User request → POST /api/v1/payment/recharge (JWT, sk-xxx key)
+  → CreateRecharge: INSERT payment_orders (status=pending)
+  → gopay API call (Alipay TradePagePay / WeChat V3TransactionNative)
+  → Return pay_url/qrcode to user
+  → User pays on Alipay/WeChat page
+  → Gateway callback → POST /api/v1/payment/notify/{alipay,wechat} (public)
+  → HandleNotify: parse + verify sign + decrypt (wechat)
+  → confirmOrder (idempotent — skips if status != "pending"):
+    → UPDATE payment_orders SET status=paid, trade_no, paid_at
+    → service.Billing().RechargeCredits() — credits the user account
+    → UPDATE payment_orders SET status=credited, credited_at
+```
 
-After generation, you can migrate from `g.DB().Model("table")` to `dao.Table.Ctx(ctx)` for type-safe DB access.
+**Pricing:** 1 CNY = 10 credits (MVP).
+**Idempotency:** confirmOrder checks `status != "pending"` → returns nil.
+**gopay SDK:** github.com/go-pay/gopay v1.5.118 — Alipay V1 + WeChat Pay V3.
 
 ## Code Conventions
 
-### Go Services
+- **Framework**: GoFrame v2 (`github.com/gogf/gf/v2`)
+- **DB access**: `g.DB().Model("table").Ctx(ctx)` — no generated DAO layer
+- **Transactions**: `g.DB().Transaction(ctx, func(ctx, tx gdb.TX) error {...})`
+- **Errors**: `gerror.Wrap(err, "context")` always
+- **Controller**: Thin — parse request, delegate to service, write response
+- **DTOs**: `internal/model/dto/` — one file per domain, GoFrame validation tags (`v:"required|min:1"`)
+- **No g.Map for DB** — use `g.Map` for data maps (no DO/entity layer; project convention differs from gfast)
+- **Response format for api gateway**: raw JSON objects (not `{code, message, data}` wrapped)
+- **Response format for admin :8082**: gfast-compatible `{code, message, data}` wrapper
 
-- **Framework**: GoFrame v2.7.1 (`github.com/gogf/gf/v2`)
-- **DB access**: `g.DB().Model("<table>").Ctx(ctx)` — global DB instance from config
-- **Config**: `g.Cfg().MustGet(ctx, "key")` — reads YAML from `manifest/config/config.yaml`
-- **Logging**: `g.Log().Info(ctx, ...)` (api-gateway/ai-gateway) or `glog.Printf(ctx, ...)` (gRPC services)
-- **HTTP context**: `g.RequestFromCtx(ctx)` to get request vars like `user_id`
-- **Errors**: Use `gerror.NewCode(gcode.CodeNotAuthorized, ...)` for API errors
+## Env Vars
 
-**Controller pattern** — thin delegation to service layer:
-```go
-type Controller struct {
-    svc *service.SomeService
-    assetv1.UnimplementedAssetServiceServer   // embed for gRPC
-}
-func New(svc *service.SomeService) *Controller { return &Controller{svc: svc} }
+| Variable | Used By | Purpose |
+|----------|---------|---------|
+| `ADMIN_API_TOKEN` | middleware.AdminTokenAuth | Static token for :8082 admin access |
+| `MODEL_KEY_ENCRYPTION_KEY` | logic/llm/key.go | AES-GCM 32-byte hex key for encrypting upstream API keys |
+| `JWT_SECRET` | logic/identity/jwt.go | HS256 signing key |
+
+## Related Projects
+
+- **gfast** (`../gfast/`) — GoFrame v3 admin framework. Frontend (Vue3) for :8082 admin server. Uses `{code, message, data}` response format, `pageNum`/`pageSize` pagination, `gftoken` auth with Redis. Port :8808.
+- **gfast-ui** — Vue3 admin SPA (separate repo, github.com/tiger1103/gfast-ui)
+
+## Key Commands
+
+```bash
+cd server && go build ./...          # build check
+cd server && go run .                # start all 3 servers
+cd server && goose up                # run migrations (7 files)
+bash server/scripts/smoke-llm.sh    # LLM end-to-end smoke test
 ```
-
-**Service pattern** — business logic:
-```go
-type SomeService struct{}
-func (s *SomeService) Method(ctx, req) (res, err) {
-    // use g.DB() for direct database access
-}
-```
-
-**Import aliases for shared api:**
-```go
-userv1 "api/user/v1"          // user proto types
-assetv1 "api/asset/v1"        // asset proto types
-marketv1 "api/market/v1"      // market proto types
-gatewayv1 "api/gateway/v1"    // gateway proto types
-```
-
-### gRPC Client Pattern (cross-service calls)
-
-```go
-// internal/grpcclient/client.go
-package grpcclient
-var UserSvc userpb.UserServiceClient  // populated in cmd.go initGrpcClients
-
-// Usage in service layer:
-grpcclient.UserSvc.SomeMethod(ctx, &userpb.SomeReq{...})
-```
-
-### Frontend (React + TypeScript)
-
-- **Framework**: React 19, TanStack Router (file-based routing), TanStack Query
-- **State**: Zustand with localStorage persistence for auth
-- **Styling**: Tailwind CSS v4 + `class-variance-authority`
-- **API**: `apiPost<T>(path, body, token?)` / `apiGet<T>(path, token)` in `src/api/client.ts`
-- **Route files**: `src/routes/<name>.tsx` with `createFileRoute('/<name>')`
-- **API base**: `http://localhost:8080/api/v1`
-
-### Auth Flow
-
-1. Login/Register → user-svc → returns JWT (HS256, 24h expiry)
-2. Web stores JWT in `localStorage` via Zustand
-3. api-gateway validates JWT in middleware, injects `user_id`/`username`/`role` into context
-4. ai-gateway validates API keys (sk-xxx prefix) via user-svc gRPC
-
-### Database
-
-PostgreSQL 16. One database per service:
-- `user_svc` — users, api_keys
-- `asset_svc` — balances, transactions, usage_records, products, orders, order_items
-- `market_svc` — listings, reviews
-- `ai_gateway` — model configs, channels
-
-**Optimistic locking** for balance updates:
-```go
-// 3-retry loop with version column
-balance:   current - quota,
-version:   gdb.Raw("version + 1"),
-total_consumed: gdb.Raw("total_consumed + " + quotaStr),
-```
-
-## Key Conventions
-
-| Rule | Why |
-|------|-----|
-| Use `gcode.CodeNotAuthorized` (not `CodeUnauthorized`) | GoFrame v2.7.1 constant |
-| All gRPC clients in dedicated `internal/grpcclient` package | Consistent dependency pattern |
-| Controllers embed `UnimplementedXxxServiceServer` | gRPC forward compatibility |
-| Proto imports via `api/<svc>/v1`, never local copies | Single source of truth |
-| Use `strings.Join` not `g.FormatFloat` for SQL literals | g.FormatFloat doesn't exist in GoFrame v2 |
-
----
-
-# Behavioral Guidelines
-
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
-
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
-
-## 1. Think Before Coding
-
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
-
-Before implementing:
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
-
-## 2. Simplicity First
-
-**Minimum code that solves the problem. Nothing speculative.**
-
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
-
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
-
-## 3. Surgical Changes
-
-**Touch only what you must. Clean up only your own mess.**
-
-When editing existing code:
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
-
-When your changes create orphans:
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
-
-The test: Every changed line should trace directly to the user's request.
-
-## 4. Goal-Driven Execution
-
-**Define success criteria. Loop until verified.**
-
-Transform tasks into verifiable goals:
-- "Add validation" → "Write tests for invalid inputs, then make them pass"
-- "Fix the bug" → "Write a test that reproduces it, then make it pass"
-- "Refactor X" → "Ensure tests pass before and after"
-
-For multi-step tasks, state a brief plan:
-```
-1. [Step] → verify: [check]
-2. [Step] → verify: [check]
-3. [Step] → verify: [check]
-```
-
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
-
----
-
-**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.

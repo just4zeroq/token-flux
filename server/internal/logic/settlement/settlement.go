@@ -2,8 +2,10 @@ package settlement
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
+	"ai-platform/internal/logic/systemconfig"
 	"ai-platform/internal/model/dto"
 	"ai-platform/internal/service"
 
@@ -69,7 +71,7 @@ func (s *sSettlement) getRecord(ctx context.Context, id int64) (*settlementRecor
 	err := g.DB().Model("settlement_records").Ctx(ctx).
 		Where("id", id).
 		Scan(&rec)
-	if err != nil {
+	if err != nil && err != sql.ErrNoRows {
 		return nil, gerror.Wrap(err, "query settlement record failed")
 	}
 	if rec.ID == 0 {
@@ -85,7 +87,7 @@ func (s *sSettlement) getRecordByRef(ctx context.Context, refType string, refID 
 		Where("ref_type", refType).
 		Where("ref_id", refID).
 		Scan(&rec)
-	if err != nil {
+	if err != nil && err != sql.ErrNoRows {
 		return nil, gerror.Wrap(err, "query settlement record by ref failed")
 	}
 	if rec.ID == 0 {
@@ -196,6 +198,14 @@ func (s *sSettlement) Settle(ctx context.Context, recordID int64) (*dto.Transact
 		return s.getTransaction(ctx, rec.TransactionID)
 	}
 
+	// Compute reward points from system config at settlement time.
+	// These are written to the record for auditability but computed here so they
+	// reflect the config values at settlement time, not record creation time.
+	pointsPerCreditConsumer := systemconfig.GetInt(ctx, "billing.points_per_credit_consumer", 1)
+	pointsPerCreditProvider := systemconfig.GetInt(ctx, "billing.points_per_credit_provider", 1)
+	pointsToConsumer := rec.CostCredits * pointsPerCreditConsumer
+	pointsToProvider := rec.ProviderRevenueCredits * pointsPerCreditProvider
+
 	// Build ledger entries.
 	// credits: -cost + provider_revenue + commission == 0 (balanced double-entry).
 	// points: one-sided issuance from virtual platform pool; no zero-sum constraint.
@@ -204,11 +214,11 @@ func (s *sSettlement) Settle(ctx context.Context, recordID int64) (*dto.Transact
 		{OwnerType: ownerTypeUser, OwnerID: rec.ProviderUserID, Asset: assetCredits, Delta: rec.ProviderRevenueCredits},
 		{OwnerType: ownerTypePlatform, OwnerID: 0, Asset: assetCredits, Delta: rec.CommissionCredits},
 	}
-	if rec.PointsToConsumer != 0 {
-		entries = append(entries, entryDelta{OwnerType: ownerTypeUser, OwnerID: rec.ConsumerUserID, Asset: assetPoints, Delta: rec.PointsToConsumer})
+	if pointsToConsumer != 0 {
+		entries = append(entries, entryDelta{OwnerType: ownerTypeUser, OwnerID: rec.ConsumerUserID, Asset: assetPoints, Delta: pointsToConsumer})
 	}
-	if rec.PointsToProvider != 0 {
-		entries = append(entries, entryDelta{OwnerType: ownerTypeUser, OwnerID: rec.ProviderUserID, Asset: assetPoints, Delta: rec.PointsToProvider})
+	if pointsToProvider != 0 {
+		entries = append(entries, entryDelta{OwnerType: ownerTypeUser, OwnerID: rec.ProviderUserID, Asset: assetPoints, Delta: pointsToProvider})
 	}
 
 	var txInfo *dto.TransactionInfo
@@ -222,9 +232,11 @@ func (s *sSettlement) Settle(ctx context.Context, recordID int64) (*dto.Transact
 		_, updateErr := tx.Model("settlement_records").
 			Where("id", rec.ID).
 			Data(g.Map{
-				"status":         "settled",
-				"settled_at":     gtime.Now(),
-				"transaction_id": txID,
+				"status":               "settled",
+				"settled_at":           gtime.Now(),
+				"transaction_id":       txID,
+				"points_to_consumer":   pointsToConsumer,
+				"points_to_provider":   pointsToProvider,
 			}).Update()
 		if updateErr != nil {
 			return gerror.Wrap(updateErr, "update settlement record settled failed")
@@ -389,4 +401,98 @@ func (s *sSettlement) RestoreOverdraftKeys(ctx context.Context, userID int64) er
 	}
 
 	return nil
+}
+
+// ========== Admin ==========
+
+func (s *sSettlement) ListSettlements(ctx context.Context, status, productType string, page, pageSize int) ([]*dto.SettlementRecordInfo, int, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+
+	model := g.DB().Model("settlement_records").Ctx(ctx)
+	if status != "" {
+		model = model.Where("status", status)
+	}
+	if productType != "" {
+		model = model.Where("product_type", productType)
+	}
+
+	total, err := model.Count()
+	if err != nil {
+		return nil, 0, gerror.Wrap(err, "count settlement records failed")
+	}
+
+	var recs []*settlementRecord
+	offset := (page - 1) * pageSize
+	err = model.Order("id DESC").Limit(pageSize).Offset(offset).Scan(&recs)
+	if err != nil {
+		return nil, 0, gerror.Wrap(err, "query settlement records failed")
+	}
+
+	list := make([]*dto.SettlementRecordInfo, len(recs))
+	for i, r := range recs {
+		list[i] = r.toDTO()
+	}
+	return list, total, nil
+}
+
+// GetProviderStats returns aggregate settlement data for a provider.
+func (s *sSettlement) GetProviderStats(ctx context.Context, providerUserID int64) (*dto.ProviderSettlementStats, error) {
+	// Total settled revenue
+	type aggRow struct {
+		TotalRevenue    int64 `json:"total_revenue"`
+		TotalCommission int64 `json:"total_commission"`
+		TotalCount      int   `json:"total_count"`
+	}
+	var agg aggRow
+	err := g.DB().Model("settlement_records").Ctx(ctx).
+		Where("provider_user_id", providerUserID).
+		Where("status", "settled").
+		Fields("COALESCE(SUM(provider_revenue_credits),0) AS total_revenue, COALESCE(SUM(commission_credits),0) AS total_commission, COUNT(*) AS total_count").
+		Scan(&agg)
+	if err != nil {
+		return nil, gerror.Wrap(err, "aggregate provider settlement failed")
+	}
+
+	// Pending revenue
+	type pendingRow struct {
+		PendingRevenue int64 `json:"pending_revenue"`
+		PendingCount   int   `json:"pending_count"`
+	}
+	var pending pendingRow
+	err = g.DB().Model("settlement_records").Ctx(ctx).
+		Where("provider_user_id", providerUserID).
+		Where("status", "pending").
+		Fields("COALESCE(SUM(provider_revenue_credits),0) AS pending_revenue, COUNT(*) AS pending_count").
+		Scan(&pending)
+	if err != nil {
+		return nil, gerror.Wrap(err, "aggregate provider pending settlement failed")
+	}
+
+	// Recent 5 settlements (any status)
+	var recs []*settlementRecord
+	err = g.DB().Model("settlement_records").Ctx(ctx).
+		Where("provider_user_id", providerUserID).
+		Order("id DESC").Limit(5).Scan(&recs)
+	if err != nil {
+		return nil, gerror.Wrap(err, "query recent provider settlements failed")
+	}
+
+	recent := make([]*dto.SettlementRecordInfo, len(recs))
+	for i, r := range recs {
+		recent[i] = r.toDTO()
+	}
+
+	return &dto.ProviderSettlementStats{
+		TotalRevenueCredits:    agg.TotalRevenue,
+		TotalCommissionCredits: agg.TotalCommission,
+		TotalSettlements:       agg.TotalCount,
+		PendingRevenueCredits:  pending.PendingRevenue,
+		PendingCount:           pending.PendingCount,
+		RecentSettlements:      recent,
+	}, nil
 }

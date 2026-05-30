@@ -11,13 +11,20 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as UsageRouteImport } from './routes/usage'
 import { Route as TransactionsRouteImport } from './routes/transactions'
+import { Route as RegisterRouteImport } from './routes/register'
+import { Route as ProvidersApplyRouteImport } from './routes/providers-apply'
+import { Route as ProvidersRouteImport } from './routes/providers'
 import { Route as OrdersRouteImport } from './routes/orders'
 import { Route as ModelsRouteImport } from './routes/models'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as KeysRouteImport } from './routes/keys'
+import { Route as DesktopRouteImport } from './routes/desktop'
 import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as ConsoleRouteImport } from './routes/console'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ProvidersNameRouteImport } from './routes/providers.$name'
+import { Route as ModelsCodeRouteImport } from './routes/models.$code'
 
 const UsageRoute = UsageRouteImport.update({
   id: '/usage',
@@ -27,6 +34,21 @@ const UsageRoute = UsageRouteImport.update({
 const TransactionsRoute = TransactionsRouteImport.update({
   id: '/transactions',
   path: '/transactions',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RegisterRoute = RegisterRouteImport.update({
+  id: '/register',
+  path: '/register',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProvidersApplyRoute = ProvidersApplyRouteImport.update({
+  id: '/providers-apply',
+  path: '/providers-apply',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ProvidersRoute = ProvidersRouteImport.update({
+  id: '/providers',
+  path: '/providers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const OrdersRoute = OrdersRouteImport.update({
@@ -49,9 +71,19 @@ const KeysRoute = KeysRouteImport.update({
   path: '/keys',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DesktopRoute = DesktopRouteImport.update({
+  id: '/desktop',
+  path: '/desktop',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const DashboardRoute = DashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConsoleRoute = ConsoleRouteImport.update({
+  id: '/console',
+  path: '/console',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -64,82 +96,155 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ProvidersNameRoute = ProvidersNameRouteImport.update({
+  id: '/$name',
+  path: '/$name',
+  getParentRoute: () => ProvidersRoute,
+} as any)
+const ModelsCodeRoute = ModelsCodeRouteImport.update({
+  id: '/$code',
+  path: '/$code',
+  getParentRoute: () => ModelsRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/console': typeof ConsoleRoute
   '/dashboard': typeof DashboardRoute
+  '/desktop': typeof DesktopRoute
   '/keys': typeof KeysRoute
   '/login': typeof LoginRoute
-  '/models': typeof ModelsRoute
+  '/models': typeof ModelsRouteWithChildren
   '/orders': typeof OrdersRoute
-  '/usage': typeof UsageRoute
+  '/providers': typeof ProvidersRouteWithChildren
+  '/providers-apply': typeof ProvidersApplyRoute
+  '/register': typeof RegisterRoute
   '/transactions': typeof TransactionsRoute
+  '/usage': typeof UsageRoute
+  '/models/$code': typeof ModelsCodeRoute
+  '/providers/$name': typeof ProvidersNameRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/console': typeof ConsoleRoute
   '/dashboard': typeof DashboardRoute
+  '/desktop': typeof DesktopRoute
   '/keys': typeof KeysRoute
   '/login': typeof LoginRoute
-  '/models': typeof ModelsRoute
+  '/models': typeof ModelsRouteWithChildren
   '/orders': typeof OrdersRoute
-  '/usage': typeof UsageRoute
+  '/providers': typeof ProvidersRouteWithChildren
+  '/providers-apply': typeof ProvidersApplyRoute
+  '/register': typeof RegisterRoute
   '/transactions': typeof TransactionsRoute
+  '/usage': typeof UsageRoute
+  '/models/$code': typeof ModelsCodeRoute
+  '/providers/$name': typeof ProvidersNameRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/admin': typeof AdminRoute
+  '/console': typeof ConsoleRoute
   '/dashboard': typeof DashboardRoute
+  '/desktop': typeof DesktopRoute
   '/keys': typeof KeysRoute
   '/login': typeof LoginRoute
-  '/models': typeof ModelsRoute
+  '/models': typeof ModelsRouteWithChildren
   '/orders': typeof OrdersRoute
-  '/usage': typeof UsageRoute
+  '/providers': typeof ProvidersRouteWithChildren
+  '/providers-apply': typeof ProvidersApplyRoute
+  '/register': typeof RegisterRoute
   '/transactions': typeof TransactionsRoute
+  '/usage': typeof UsageRoute
+  '/models/$code': typeof ModelsCodeRoute
+  '/providers/$name': typeof ProvidersNameRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
     | '/admin'
+    | '/console'
     | '/dashboard'
+    | '/desktop'
     | '/keys'
     | '/login'
     | '/models'
     | '/orders'
-    | '/usage'
+    | '/providers'
+    | '/providers-apply'
+    | '/register'
     | '/transactions'
+    | '/usage'
+    | '/models/$code'
+    | '/providers/$name'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/dashboard' | '/keys' | '/login' | '/models' | '/orders' | '/usage' | '/transactions'
+  to:
+    | '/'
+    | '/admin'
+    | '/console'
+    | '/dashboard'
+    | '/desktop'
+    | '/keys'
+    | '/login'
+    | '/models'
+    | '/orders'
+    | '/providers'
+    | '/providers-apply'
+    | '/register'
+    | '/transactions'
+    | '/usage'
+    | '/models/$code'
+    | '/providers/$name'
   id:
     | '__root__'
     | '/'
     | '/admin'
+    | '/console'
     | '/dashboard'
+    | '/desktop'
     | '/keys'
     | '/login'
     | '/models'
     | '/orders'
-    | '/usage'
+    | '/providers'
+    | '/providers-apply'
+    | '/register'
     | '/transactions'
+    | '/usage'
+    | '/models/$code'
+    | '/providers/$name'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRoute
+  ConsoleRoute: typeof ConsoleRoute
   DashboardRoute: typeof DashboardRoute
+  DesktopRoute: typeof DesktopRoute
   KeysRoute: typeof KeysRoute
   LoginRoute: typeof LoginRoute
-  ModelsRoute: typeof ModelsRoute
+  ModelsRoute: typeof ModelsRouteWithChildren
   OrdersRoute: typeof OrdersRoute
-  UsageRoute: typeof UsageRoute
+  ProvidersRoute: typeof ProvidersRouteWithChildren
+  ProvidersApplyRoute: typeof ProvidersApplyRoute
+  RegisterRoute: typeof RegisterRoute
   TransactionsRoute: typeof TransactionsRoute
+  UsageRoute: typeof UsageRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/usage': {
+      id: '/usage'
+      path: '/usage'
+      fullPath: '/usage'
+      preLoaderRoute: typeof UsageRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/transactions': {
       id: '/transactions'
       path: '/transactions'
@@ -147,11 +252,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TransactionsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/usage': {
-      id: '/usage'
-      path: '/usage'
-      fullPath: '/usage'
-      preLoaderRoute: typeof UsageRouteImport
+    '/register': {
+      id: '/register'
+      path: '/register'
+      fullPath: '/register'
+      preLoaderRoute: typeof RegisterRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/providers-apply': {
+      id: '/providers-apply'
+      path: '/providers-apply'
+      fullPath: '/providers-apply'
+      preLoaderRoute: typeof ProvidersApplyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/providers': {
+      id: '/providers'
+      path: '/providers'
+      fullPath: '/providers'
+      preLoaderRoute: typeof ProvidersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/orders': {
@@ -182,11 +301,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof KeysRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/desktop': {
+      id: '/desktop'
+      path: '/desktop'
+      fullPath: '/desktop'
+      preLoaderRoute: typeof DesktopRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/dashboard': {
       id: '/dashboard'
       path: '/dashboard'
       fullPath: '/dashboard'
       preLoaderRoute: typeof DashboardRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/console': {
+      id: '/console'
+      path: '/console'
+      fullPath: '/console'
+      preLoaderRoute: typeof ConsoleRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -203,19 +336,61 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/providers/$name': {
+      id: '/providers/$name'
+      path: '/$name'
+      fullPath: '/providers/$name'
+      preLoaderRoute: typeof ProvidersNameRouteImport
+      parentRoute: typeof ProvidersRoute
+    }
+    '/models/$code': {
+      id: '/models/$code'
+      path: '/$code'
+      fullPath: '/models/$code'
+      preLoaderRoute: typeof ModelsCodeRouteImport
+      parentRoute: typeof ModelsRoute
+    }
   }
 }
+
+interface ModelsRouteChildren {
+  ModelsCodeRoute: typeof ModelsCodeRoute
+}
+
+const ModelsRouteChildren: ModelsRouteChildren = {
+  ModelsCodeRoute: ModelsCodeRoute,
+}
+
+const ModelsRouteWithChildren =
+  ModelsRoute._addFileChildren(ModelsRouteChildren)
+
+interface ProvidersRouteChildren {
+  ProvidersNameRoute: typeof ProvidersNameRoute
+}
+
+const ProvidersRouteChildren: ProvidersRouteChildren = {
+  ProvidersNameRoute: ProvidersNameRoute,
+}
+
+const ProvidersRouteWithChildren = ProvidersRoute._addFileChildren(
+  ProvidersRouteChildren,
+)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRoute,
+  ConsoleRoute: ConsoleRoute,
   DashboardRoute: DashboardRoute,
+  DesktopRoute: DesktopRoute,
   KeysRoute: KeysRoute,
   LoginRoute: LoginRoute,
-  ModelsRoute: ModelsRoute,
+  ModelsRoute: ModelsRouteWithChildren,
   OrdersRoute: OrdersRoute,
-  UsageRoute: UsageRoute,
+  ProvidersRoute: ProvidersRouteWithChildren,
+  ProvidersApplyRoute: ProvidersApplyRoute,
+  RegisterRoute: RegisterRoute,
   TransactionsRoute: TransactionsRoute,
+  UsageRoute: UsageRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

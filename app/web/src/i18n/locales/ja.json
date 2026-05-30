@@ -1,0 +1,29 @@
+{
+  "translation": {
+    "nav": { "home": "ホーム", "models": "モデル", "providers": "プロバイダー", "console": "コンソール", "login": "ログイン", "register": "登録", "logout": "ログアウト", "profile": "プロフィール", "backToHome": "ホームに戻る" },
+    "home": {
+      "hero": { "badge": "Platform v2.0 — リリース", "title": "次世代の", "titleHighlight": "AIアプリ", "subtitle": "APIキー管理・モデルGW・MCP・複式決済 — LLMプロダクトの全て。", "cta": "無料ではじめる", "viewModels": "モデルを見る →" },
+      "capabilities": { "title": "必要なものすべて", "subtitle": "1つのプラットフォーム。LLM構築の全ツール。" },
+      "cta": { "title": "準備はいい？", "subtitle": "登録で100クレジット。カード不要。", "button": "無料アカウント作成", "note": "無料枠100クレジット。いつでも解約可。" }
+    },
+    "models": {
+      "title": "モデルファクトリー", "subtitle": "利用可能なLLMモデルの閲覧・比較。", "search": "モデル名・コード・開発者で検索...", "loading": "読み込み中...", "noResults": "モデルが見つかりません", "noResultsHint": "検索条件をお試しください。",
+      "filter": { "clearAll": "{{count}}件のフィルター解除", "developer": "開発者", "contextWindow": "コンテキスト", "capabilities": "機能", "all": "全件" },
+      "detail": { "tryInConsole": "コンソールで試す", "inputPrice": "入力 /1K", "outputPrice": "出力 /1K", "cacheHitPrice": "キャッシュ /1K", "availableProviders": "利用可能プロバイダー", "noProviders": "プロバイダー未登録。", "notFound": "モデル未検出", "backToModels": "← モデル一覧に戻る" }
+    },
+    "providers": {
+      "title": "プロバイダー", "loading": "読み込み中...", "search": "検索...", "searchButton": "検索", "noResults": "見つかりません", "applyAsProvider": "プロバイダー申請",
+      "sort": { "modelCount": "モデル数", "callVolume": "呼量", "reputation": "評価" },
+      "card": { "models": "モデル", "calls": "呼", "tokens": "トークン" },
+      "detail": { "backToProviders": "← 一覧に戻る", "notFound": "未検出", "stats": { "models": "モデル数", "totalCalls": "総呼量", "totalTokens": "総トークン" } }
+    },
+    "console": {
+      "overview": "概要", "welcomeBack": "おかえりなさい、{{name}}さん", "credits": "クレジット", "wallet": "ウォレット", "points": "ポイント", "activeKeys": "有効キー", "recharge": "+ チャージ",
+      "revenue": "収益", "totalRevenue": "総収益", "commission": "手数料", "settlements": "決済", "models": "モデル", "pendingRevenue": "未決済収益", "pendingSettlements": "未決済件数",
+      "recentUsage": "最近の利用", "viewAll": "全件 →", "noUsage": "まだ利用がありません。", "modelUsageRanking": "モデル利用ランキング"
+    },
+    "login": { "title": "ログイン", "email": "メール", "password": "パスワード", "submit": "ログイン", "noAccount": "アカウント未登録？", "register": "登録" },
+    "register": { "title": "アカウント作成", "username": "ユーザー名", "email": "メール", "password": "パスワード", "submit": "作成", "haveAccount": "アカウントお持ち？", "login": "ログイン" },
+    "common": { "loading": "読み込み中...", "error": "エラー", "noData": "データなし", "cancel": "キャンセル", "save": "保存", "delete": "削除", "back": "戻る", "close": "閉じる", "search": "検索...", "active": "有効", "inactive": "無効", "unknown": "不明" }
+  }
+}

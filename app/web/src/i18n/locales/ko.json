@@ -1,0 +1,29 @@
+{
+  "translation": {
+    "nav": { "home": "홈", "models": "모델", "providers": "제공자", "console": "콘솔", "login": "로그인", "register": "가입", "logout": "로그아웃", "profile": "프로필", "backToHome": "홈으로" },
+    "home": {
+      "hero": { "badge": "Platform v2.0 — 출시", "title": "차세대", "titleHighlight": "AI 앱", "subtitle": "API 키 관리·모델 GW·MCP·복식결제 — LLM 제품의 모든 것.", "cta": "무료 시작", "viewModels": "모델 보기 →" },
+      "capabilities": { "title": "필요한 모든 것", "subtitle": "하나의 플랫폼. LLM 구축의 모든 도구." },
+      "cta": { "title": "준비됐나요?", "subtitle": "가입 시 100 크레딧. 카드 불필요.", "button": "무료 계정 만들기", "note": "무료 100 크레딧. 언제든 해지 가능." }
+    },
+    "models": {
+      "title": "모델 팩토리", "subtitle": "이용 가능한 LLM 모델 탐색·비교.", "search": "모델명·코드·개발자 검색...", "loading": "로딩 중...", "noResults": "모델 없음", "noResultsHint": "검색 조건을 조정해보세요.",
+      "filter": { "clearAll": "{{count}}개 필터 해제", "developer": "개발자", "contextWindow": "컨텍스트", "capabilities": "기능", "all": "전체" },
+      "detail": { "tryInConsole": "콘솔에서 시험", "inputPrice": "입력 /1K", "outputPrice": "출력 /1K", "cacheHitPrice": "캐시 /1K", "availableProviders": "이용 가능 제공자", "noProviders": "제공자 미등록.", "notFound": "모델 미발견", "backToModels": "← 모델 목록으로" }
+    },
+    "providers": {
+      "title": "제공자", "loading": "로딩 중...", "search": "검색...", "searchButton": "검색", "noResults": "없음", "applyAsProvider": "제공자 신청",
+      "sort": { "modelCount": "모델 수", "callVolume": "호출량", "reputation": "평판" },
+      "card": { "models": "모델", "calls": "호출", "tokens": "토큰" },
+      "detail": { "backToProviders": "← 목록으로", "notFound": "미발견", "stats": { "models": "모델 수", "totalCalls": "총호출", "totalTokens": "총토큰" } }
+    },
+    "console": {
+      "overview": "개요", "welcomeBack": "{{name}}님 환영합니다", "credits": "크레딧", "wallet": "지갑", "points": "포인트", "activeKeys": "활성 키", "recharge": "+ 충전",
+      "revenue": "수익", "totalRevenue": "총수익", "commission": "수수료", "settlements": "정산", "models": "모델", "pendingRevenue": "미정산 수익", "pendingSettlements": "미정산 건",
+      "recentUsage": "최근 사용", "viewAll": "전체 →", "noUsage": "아직 사용 내역이 없습니다.", "modelUsageRanking": "모델 사용 랭킹"
+    },
+    "login": { "title": "로그인", "email": "이메일", "password": "비밀번호", "submit": "로그인", "noAccount": "계정이 없나요?", "register": "가입" },
+    "register": { "title": "계정 만들기", "username": "사용자명", "email": "이메일", "password": "비밀번호", "submit": "만들기", "haveAccount": "이미 계정이 있나요?", "login": "로그인" },
+    "common": { "loading": "로딩 중...", "error": "오류", "noData": "데이터 없음", "cancel": "취소", "save": "저장", "delete": "삭제", "back": "뒤로", "close": "닫기", "search": "검색...", "active": "활성", "inactive": "비활성", "unknown": "알 수 없음" }
+  }
+}

@@ -2,6 +2,7 @@ package settlement
 
 import (
 	"context"
+	"database/sql"
 
 	"github.com/gogf/gf/v2/database/gdb"
 	"github.com/gogf/gf/v2/errors/gerror"
@@ -84,7 +85,7 @@ func postLedger(ctx context.Context, tx gdb.TX, txType, refType string, refID in
 			Where("owner_id", e.OwnerID).
 			Where("asset", e.Asset).
 			Scan(&acc)
-		if err != nil {
+		if err != nil && err != sql.ErrNoRows {
 			return 0, nil, gerror.Wrap(err, "query account failed")
 		}
 

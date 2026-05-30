@@ -7,9 +7,12 @@ package logic
 
 import (
 	_ "ai-platform/internal/logic/billing"
+	_ "ai-platform/internal/logic/developer"
 	_ "ai-platform/internal/logic/gateway"
 	_ "ai-platform/internal/logic/identity"
+	_ "ai-platform/internal/logic/invoice"
 	_ "ai-platform/internal/logic/llm"
+	_ "ai-platform/internal/logic/payment"
 	_ "ai-platform/internal/logic/settlement"
 	_ "ai-platform/internal/logic/wallet"
 )

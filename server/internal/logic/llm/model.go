@@ -7,7 +7,6 @@ import (
 
 	"ai-platform/internal/model/dto"
 
-	"github.com/gogf/gf/v2/database/gdb"
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/os/gtime"
@@ -141,6 +140,15 @@ func (s *sLLM) ListModelSpecs(ctx context.Context, in dto.LLMListModelSpecsIn) (
 	if in.Status != "" {
 		model = model.Where("status", in.Status)
 	}
+	if in.SourceType != "" {
+		model = model.Where("source_type", in.SourceType)
+	}
+	if in.CreatedByUserID != 0 {
+		model = model.Where("created_by_user_id", in.CreatedByUserID)
+	}
+	if in.ProviderUserID != 0 {
+		model = model.Where("(source_type = 'admin' OR created_by_user_id = ?)", in.ProviderUserID)
+	}
 
 	total, err := model.Count()
 	if err != nil {
@@ -188,102 +196,14 @@ func (s *sLLM) ReviewModelSpec(ctx context.Context, in dto.LLMReviewModelSpecIn)
 	return nil
 }
 
-// --- Model Prices ---
-
-type modelPriceRow struct {
-	ID                  int64       `json:"id"`
-	ModelSpecID         int64       `json:"model_spec_id"`
-	Capability          string      `json:"capability"`
-	CurrencyAsset       string      `json:"currency_asset"`
-	CacheHitPricePer1K  int64       `json:"cache_hit_price_per_1k"`
-	CacheMissPricePer1K int64       `json:"cache_miss_price_per_1k"`
-	OutputPricePer1K    int64       `json:"output_price_per_1k"`
-	Status              string      `json:"status"`
-	CreatedAt           gtime.Time  `json:"created_at"`
-	UpdatedAt           gtime.Time  `json:"updated_at"`
-}
-
-func (r *modelPriceRow) toDTO() *dto.LLMModelPriceInfo {
-	return &dto.LLMModelPriceInfo{
-		ID:                  r.ID,
-		ModelSpecID:         r.ModelSpecID,
-		Capability:          r.Capability,
-		CurrencyAsset:       r.CurrencyAsset,
-		CacheHitPricePer1K:  r.CacheHitPricePer1K,
-		CacheMissPricePer1K: r.CacheMissPricePer1K,
-		OutputPricePer1K:    r.OutputPricePer1K,
-		Status:              r.Status,
-		CreatedAt:           r.CreatedAt.Time,
-		UpdatedAt:           r.UpdatedAt.Time,
-	}
-}
-
-func (s *sLLM) UpsertModelPrice(ctx context.Context, in dto.LLMUpsertModelPriceIn) (*dto.LLMModelPriceInfo, error) {
-	var info *dto.LLMModelPriceInfo
-
-	err := g.DB().Transaction(ctx, func(ctx context.Context, tx gdb.TX) error {
-		// Check if existing price for (model_spec_id, capability) with status 'active'.
-		var existing modelPriceRow
-		queryErr := tx.Model("llm_model_prices").
-			Where("model_spec_id", in.ModelSpecID).
-			Where("capability", in.Capability).
-			Where("status", "active").
-			Scan(&existing)
-		if queryErr != nil {
-			return gerror.Wrap(queryErr, "query existing price failed")
-		}
-
-		if existing.ID != 0 {
-			_, updateErr := tx.Model("llm_model_prices").
-				Where("id", existing.ID).
-				Data(g.Map{"status": "inactive"}).
-				Update()
-			if updateErr != nil {
-				return gerror.Wrap(updateErr, "deactivate old price failed")
-			}
-		}
-
-		// Insert new price with status 'active'.
-		result, insertErr := tx.Model("llm_model_prices").Data(g.Map{
-			"model_spec_id":           in.ModelSpecID,
-			"capability":              in.Capability,
-			"cache_hit_price_per_1k":  in.CacheHitPricePer1K,
-			"cache_miss_price_per_1k": in.CacheMissPricePer1K,
-			"output_price_per_1k":     in.OutputPricePer1K,
-			"status":                  "active",
-		}).Insert()
-		if insertErr != nil {
-			return gerror.Wrap(insertErr, "insert model price failed")
-		}
-
-		id, _ := result.LastInsertId()
-		var row modelPriceRow
-		scanErr := tx.Model("llm_model_prices").Where("id", id).Scan(&row)
-		if scanErr != nil {
-			return gerror.Wrap(scanErr, "query created price failed")
-		}
-		info = row.toDTO()
-		return nil
-	})
+func (s *sLLM) DeleteModelSpec(ctx context.Context, id int64) error {
+	rows, err := g.DB().Model("llm_model_specs").Ctx(ctx).Where("id", id).Delete()
 	if err != nil {
-		return nil, err
+		return gerror.Wrap(err, "delete model spec failed")
 	}
-	return info, nil
-}
-
-func (s *sLLM) ListModelPrices(ctx context.Context, modelSpecID int64) ([]*dto.LLMModelPriceInfo, error) {
-	var rows []*modelPriceRow
-	err := g.DB().Model("llm_model_prices").Ctx(ctx).
-		Where("model_spec_id", modelSpecID).
-		Order("id DESC").
-		Scan(&rows)
-	if err != nil {
-		return nil, gerror.Wrap(err, "query model prices failed")
+	affected, _ := rows.RowsAffected()
+	if affected == 0 {
+		return gerror.New("model spec not found")
 	}
-
-	list := make([]*dto.LLMModelPriceInfo, len(rows))
-	for i, r := range rows {
-		list[i] = r.toDTO()
-	}
-	return list, nil
+	return nil
 }

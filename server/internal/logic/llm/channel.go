@@ -11,11 +11,13 @@ import (
 	"github.com/gogf/gf/v2/os/gtime"
 )
 
-var allowedProtocolKeys = map[string]bool{
-	"openai-compatible":     true,
-	"anthropic-compatible":  true,
-	"gemini-compatible":     true,
-	"azure-openai":          true,
+// buildAllowedProtocolMap builds a lookup map from the DTO list.
+func buildAllowedProtocolMap() map[string]bool {
+	m := make(map[string]bool, len(dto.AllowedProtocolKeys))
+	for _, k := range dto.AllowedProtocolKeys {
+		m[k] = true
+	}
+	return m
 }
 
 type channelRow struct {
@@ -25,6 +27,7 @@ type channelRow struct {
 	Description      string      `json:"description"`
 	ProtocolsJson    string      `json:"protocols_json"`
 	Status           string      `json:"status"`
+	SourceType       string      `json:"source_type"`
 	CreatedByUserID  int64       `json:"created_by_user_id"`
 	ReviewedByUserID int64       `json:"reviewed_by_user_id"`
 	ReviewedAt       *gtime.Time `json:"reviewed_at"`
@@ -41,6 +44,7 @@ func (r *channelRow) toDTO() *dto.LLMChannelInfo {
 		Description:     r.Description,
 		ProtocolsJson:   r.ProtocolsJson,
 		Status:          r.Status,
+		SourceType:      r.SourceType,
 		CreatedByUserID: r.CreatedByUserID,
 		ReviewedByUserID: r.ReviewedByUserID,
 		ReviewNote:      r.ReviewNote,
@@ -53,25 +57,57 @@ func (r *channelRow) toDTO() *dto.LLMChannelInfo {
 	return info
 }
 
-func (s *sLLM) CreateChannel(ctx context.Context, in dto.LLMCreateChannelIn) (*dto.LLMChannelInfo, error) {
-	// Validate protocols_json is valid JSON.
-	var protocols map[string]any
-	if err := json.Unmarshal([]byte(in.ProtocolsJson), &protocols); err != nil {
-		return nil, gerror.Wrap(err, "protocols_json is not valid JSON")
+// protocolsToJSON converts a slice of ProtocolEntry to the internal JSON object format.
+// Input:  [{protocol:"openai-compatible", base_url:"https://..."}]
+// Output: {"openai-compatible": {"base_url": "https://..."}}
+func protocolsToJSON(entries []dto.ProtocolEntry) (string, error) {
+	if len(entries) == 0 {
+		return "", gerror.New("at least one protocol entry is required")
 	}
-	// Validate protocol keys are in allowed set.
-	for k := range protocols {
-		if !allowedProtocolKeys[k] {
-			return nil, gerror.Newf("unknown protocol key: %s", k)
+	allowed := buildAllowedProtocolMap()
+	obj := make(map[string]map[string]string, len(entries))
+	for _, e := range entries {
+		if !allowed[e.Protocol] {
+			return "", gerror.Newf("unknown protocol: %s (allowed: %v)", e.Protocol, dto.AllowedProtocolKeys)
 		}
+		if e.BaseURL == "" {
+			return "", gerror.Newf("base_url is required for protocol: %s", e.Protocol)
+		}
+		obj[e.Protocol] = map[string]string{"base_url": e.BaseURL}
+	}
+	b, err := json.Marshal(obj)
+	if err != nil {
+		return "", gerror.Wrap(err, "marshal protocols to JSON failed")
+	}
+	return string(b), nil
+}
+
+func (s *sLLM) CreateChannel(ctx context.Context, in dto.LLMCreateChannelIn) (*dto.LLMChannelInfo, error) {
+	// Convert structured protocol entries to internal JSON object format.
+	protocolsJSON, err := protocolsToJSON(in.Protocols)
+	if err != nil {
+		return nil, err
+	}
+
+	sourceType := in.SourceType
+	if sourceType == "" {
+		sourceType = "admin"
+	}
+
+	// Provider-added channels start as pending (need admin review).
+	// Admin-created channels start active directly.
+	status := "active"
+	if sourceType == "provider" {
+		status = "pending"
 	}
 
 	data := g.Map{
 		"code":           in.Code,
 		"name":           in.Name,
 		"description":    in.Description,
-		"protocols_json": in.ProtocolsJson,
-		"status":         "pending",
+		"protocols_json": protocolsJSON,
+		"source_type":    sourceType,
+		"status":         status,
 	}
 	if in.CreatedByUserID != 0 {
 		data["created_by_user_id"] = in.CreatedByUserID
@@ -104,6 +140,16 @@ func (s *sLLM) ListChannels(ctx context.Context, in dto.LLMListChannelsIn) ([]*d
 	if in.Status != "" {
 		model = model.Where("status", in.Status)
 	}
+	if in.SourceType != "" {
+		model = model.Where("source_type", in.SourceType)
+	}
+	if in.CreatedByUserID != 0 {
+		model = model.Where("created_by_user_id", in.CreatedByUserID)
+	}
+	// ProviderUserID: show admin channels OR channels owned by this user.
+	if in.ProviderUserID != 0 {
+		model = model.Where("(source_type = 'admin' OR created_by_user_id = ?)", in.ProviderUserID)
+	}
 
 	total, err := model.Count()
 	if err != nil {
@@ -122,6 +168,7 @@ func (s *sLLM) ListChannels(ctx context.Context, in dto.LLMListChannelsIn) ([]*d
 	}
 	return list, total, nil
 }
+
 
 func (s *sLLM) ReviewChannel(ctx context.Context, in dto.LLMReviewChannelIn) error {
 	// Verify channel exists and status is pending.
@@ -147,6 +194,18 @@ func (s *sLLM) ReviewChannel(ctx context.Context, in dto.LLMReviewChannelIn) err
 		}).Update()
 	if err != nil {
 		return gerror.Wrap(err, "update channel review failed")
+	}
+	return nil
+}
+
+func (s *sLLM) DeleteChannel(ctx context.Context, id int64) error {
+	rows, err := g.DB().Model("llm_channels").Ctx(ctx).Where("id", id).Delete()
+	if err != nil {
+		return gerror.Wrap(err, "delete channel failed")
+	}
+	affected, _ := rows.RowsAffected()
+	if affected == 0 {
+		return gerror.New("channel not found")
 	}
 	return nil
 }

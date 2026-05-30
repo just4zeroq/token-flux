@@ -1,0 +1,29 @@
+{
+  "translation": {
+    "nav": { "home": "Trang chủ", "models": "Mô hình", "providers": "Nhà cung cấp", "console": "Bảng điều khiển", "login": "Đăng nhập", "register": "Đăng ký", "logout": "Đăng xuất", "profile": "Hồ sơ", "backToHome": "Về trang chủ" },
+    "home": {
+      "hero": { "badge": "Platform v2.0 — Đã ra mắt", "title": "Xây dựng thế hệ", "titleHighlight": "Ứng dụng AI", "subtitle": "Quản lý key API · GW mô hình · MCP · Kế toán kép — mọi thứ cho sản phẩm LLM.", "cta": "Dùng thử miễn phí", "viewModels": "Xem mô hình →" },
+      "capabilities": { "title": "Mọi thứ bạn cần", "subtitle": "Một nền tảng. Tất cả công cụ xây dựng LLM." },
+      "cta": { "title": "Sẵn sàng?", "subtitle": "100 credit miễn phí khi đăng ký. Không cần thẻ.", "button": "Tạo tài khoản miễn phí", "note": "Gói miễn phí 100 credit. Hủy bất cứ lúc nào." }
+    },
+    "models": {
+      "title": "Thư viện mô hình", "subtitle": "Duyệt và so sánh các mô hình LLM.", "search": "Tìm theo tên, mã, nhà phát triển...", "loading": "Đang tải...", "noResults": "Không tìm thấy mô hình", "noResultsHint": "Thử điều chỉnh tìm kiếm.",
+      "filter": { "clearAll": "Xóa {{count}} bộ lọc", "developer": "Nhà phát triển", "contextWindow": "Ngữ cảnh", "capabilities": "Khả năng", "all": "Tất cả" },
+      "detail": { "tryInConsole": "Dùng thử", "inputPrice": "Đầu vào /1K", "outputPrice": "Đầu ra /1K", "cacheHitPrice": "Bộ nhớ đệm /1K", "availableProviders": "Nhà cung cấp", "noProviders": "Chưa có nhà cung cấp.", "notFound": "Không tìm thấy", "backToModels": "← Quay lại" }
+    },
+    "providers": {
+      "title": "Nhà cung cấp", "loading": "Đang tải...", "search": "Tìm kiếm...", "searchButton": "Tìm", "noResults": "Không tìm thấy", "applyAsProvider": "Đăng ký cung cấp",
+      "sort": { "modelCount": "Số mô hình", "callVolume": "Lượt gọi", "reputation": "Uy tín" },
+      "card": { "models": "Mô hình", "calls": "Gọi", "tokens": "Token" },
+      "detail": { "backToProviders": "← Quay lại", "notFound": "Không tìm thấy", "stats": { "models": "Mô hình", "totalCalls": "Tổng lượt", "totalTokens": "Tổng token" } }
+    },
+    "console": {
+      "overview": "Tổng quan", "welcomeBack": "Chào mừng, {{name}}", "credits": "Credit", "wallet": "Ví", "points": "Điểm", "activeKeys": "Key đang dùng", "recharge": "+ Nạp",
+      "revenue": "Doanh thu", "totalRevenue": "Tổng doanh thu", "commission": "Hoa hồng", "settlements": "Quyết toán", "models": "Mô hình", "pendingRevenue": "Chờ quyết toán", "pendingSettlements": "Số đơn chờ",
+      "recentUsage": "Sử dụng gần đây", "viewAll": "Xem tất cả →", "noUsage": "Chưa có dữ liệu.", "modelUsageRanking": "Xếp hạng sử dụng"
+    },
+    "login": { "title": "Đăng nhập", "email": "Email", "password": "Mật khẩu", "submit": "Đăng nhập", "noAccount": "Chưa có tài khoản?", "register": "Đăng ký" },
+    "register": { "title": "Tạo tài khoản", "username": "Tên người dùng", "email": "Email", "password": "Mật khẩu", "submit": "Tạo tài khoản", "haveAccount": "Đã có tài khoản?", "login": "Đăng nhập" },
+    "common": { "loading": "Đang tải...", "error": "Lỗi", "noData": "Không có dữ liệu", "cancel": "Hủy", "save": "Lưu", "delete": "Xóa", "back": "Quay lại", "close": "Đóng", "search": "Tìm kiếm...", "active": "Hoạt động", "inactive": "Không hoạt động", "unknown": "Không rõ" }
+  }
+}

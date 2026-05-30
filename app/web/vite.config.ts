@@ -11,4 +11,25 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  server: {
+    proxy: {
+      '/api/admin': {
+        target: 'http://localhost:8082',
+        changeOrigin: true,
+        rewrite: (p) => p,
+      },
+      '/api/v1': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      '/v1': {
+        target: 'http://localhost:8081',
+        changeOrigin: true,
+      },
+      '/health': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+    },
+  },
 })

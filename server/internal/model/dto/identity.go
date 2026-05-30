@@ -43,13 +43,15 @@ type LoginOut struct {
 // ========== User ==========
 
 type UserInfo struct {
-	ID          int64  `json:"id"`
-	Username    string `json:"username"`
-	Email       string `json:"email"`
-	DisplayName string `json:"display_name"`
-	Avatar      string `json:"avatar"`
-	Role        int    `json:"role"`
-	KYCStatus   string `json:"kyc_status"`
+	ID          int64     `json:"id"`
+	Username    string    `json:"username"`
+	Email       string    `json:"email"`
+	DisplayName string    `json:"display_name"`
+	Avatar      string    `json:"avatar"`
+	Role        int       `json:"role"`
+	Status      int       `json:"status"`
+	KYCStatus   string    `json:"kyc_status"`
+	CreatedAt   time.Time `json:"created_at"`
 }
 
 // ========== JWT / Auth ==========
@@ -94,4 +96,12 @@ type ApiKeyInfo struct {
 
 type DeleteApiKeyIn struct {
 	KeyID int64 `json:"key_id" v:"required"`
+}
+
+// ========== Admin ==========
+
+type CreateUserIn struct {
+	Email    string `json:"email" v:"required|email|length:1,255"`
+	Password string `json:"password" v:"required|length:8,128"`
+	Role     int    `json:"role" v:"in:0,1"`
 }

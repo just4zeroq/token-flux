@@ -10,13 +10,12 @@ type ILLM interface {
 	CreateChannel(ctx context.Context, in dto.LLMCreateChannelIn) (*dto.LLMChannelInfo, error)
 	ListChannels(ctx context.Context, in dto.LLMListChannelsIn) ([]*dto.LLMChannelInfo, int, error)
 	ReviewChannel(ctx context.Context, in dto.LLMReviewChannelIn) error
+	DeleteChannel(ctx context.Context, id int64) error
 
 	CreateModelSpec(ctx context.Context, in dto.LLMCreateModelSpecIn) (*dto.LLMModelSpecInfo, error)
 	ListModelSpecs(ctx context.Context, in dto.LLMListModelSpecsIn) ([]*dto.LLMModelSpecInfo, int, error)
 	ReviewModelSpec(ctx context.Context, in dto.LLMReviewModelSpecIn) error
-
-	UpsertModelPrice(ctx context.Context, in dto.LLMUpsertModelPriceIn) (*dto.LLMModelPriceInfo, error)
-	ListModelPrices(ctx context.Context, modelSpecID int64) ([]*dto.LLMModelPriceInfo, error)
+	DeleteModelSpec(ctx context.Context, id int64) error
 
 	CreateModelKey(ctx context.Context, providerUserID int64, in dto.LLMCreateModelKeyIn) (*dto.LLMModelKeyInfo, error)
 	ListModelKeys(ctx context.Context, in dto.LLMListModelKeysIn) ([]*dto.LLMModelKeyInfo, int, error)
@@ -30,6 +29,10 @@ type ILLM interface {
 	ProxyChatCompletions(ctx context.Context, in dto.OpenAIProxyRequest) (*dto.OpenAIProxyResponse, error)
 	ProxyCompletions(ctx context.Context, in dto.OpenAIProxyRequest) (*dto.OpenAIProxyResponse, error)
 	ProxyEmbeddings(ctx context.Context, in dto.OpenAIProxyRequest) (*dto.OpenAIProxyResponse, error)
+
+	// Provider settings
+	GetProviderShareBps(ctx context.Context, userID int64) (int, error)
+	SetProviderShareBps(ctx context.Context, userID int64, shareBps int) error
 }
 
 var localLLM ILLM

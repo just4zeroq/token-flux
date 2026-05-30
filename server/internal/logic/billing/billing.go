@@ -428,3 +428,113 @@ func (s *sBilling) RechargeCredits(ctx context.Context, userID, amountCredits in
 	}
 	return tx, nil
 }
+
+// ========== Admin ==========
+
+func (s *sBilling) ListAllAccounts(ctx context.Context, ownerType, asset string, page, pageSize int) ([]*dto.AccountInfo, int, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+
+	model := g.DB().Model("accounts").Ctx(ctx)
+	if ownerType != "" {
+		model = model.Where("owner_type", ownerType)
+	}
+	if asset != "" {
+		model = model.Where("asset", asset)
+	}
+
+	total, err := model.Count()
+	if err != nil {
+		return nil, 0, gerror.Wrap(err, "count accounts failed")
+	}
+
+	var accounts []*billingAccount
+	offset := (page - 1) * pageSize
+	err = model.Order("id DESC").Limit(pageSize).Offset(offset).Scan(&accounts)
+	if err != nil {
+		return nil, 0, gerror.Wrap(err, "query accounts failed")
+	}
+
+	list := make([]*dto.AccountInfo, len(accounts))
+	for i, a := range accounts {
+		list[i] = a.toDTO()
+	}
+	return list, total, nil
+}
+
+func (s *sBilling) ListAllTransactions(ctx context.Context, page, pageSize int) ([]*dto.TransactionInfo, int, error) {
+	if page <= 0 {
+		page = 1
+	}
+	if pageSize <= 0 {
+		pageSize = 20
+	}
+
+	total, err := g.DB().Model("transactions").Ctx(ctx).Count()
+	if err != nil {
+		return nil, 0, gerror.Wrap(err, "count transactions failed")
+	}
+
+	var txs []*transactionRow
+	offset := (page - 1) * pageSize
+	err = g.DB().Model("transactions").Ctx(ctx).
+		Order("id DESC").
+		Limit(pageSize).
+		Offset(offset).
+		Scan(&txs)
+	if err != nil {
+		return nil, 0, gerror.Wrap(err, "query transactions failed")
+	}
+
+	txIDs := make([]int64, len(txs))
+	for i, tx := range txs {
+		txIDs[i] = tx.ID
+	}
+
+	type entryRow struct {
+		ID                int64 `json:"id"`
+		TxID              int64 `json:"tx_id"`
+		AccountID         int64 `json:"account_id"`
+		DeltaMicro        int64 `json:"delta_micro"`
+		BalanceAfterMicro int64 `json:"balance_after_micro"`
+	}
+
+	var entries []*entryRow
+	if len(txIDs) > 0 {
+		err = g.DB().Model("transaction_entries").Ctx(ctx).
+			Where("tx_id IN (?)", txIDs).
+			Order("id ASC").
+			Scan(&entries)
+		if err != nil {
+			return nil, 0, gerror.Wrap(err, "query entries failed")
+		}
+	}
+
+	entriesByTx := make(map[int64][]dto.TransactionEntryInfo, len(txs))
+	for _, e := range entries {
+		entriesByTx[e.TxID] = append(entriesByTx[e.TxID], dto.TransactionEntryInfo{
+			ID:                e.ID,
+			AccountID:         e.AccountID,
+			DeltaMicro:        e.DeltaMicro,
+			BalanceAfterMicro: e.BalanceAfterMicro,
+		})
+	}
+
+	result := make([]*dto.TransactionInfo, len(txs))
+	for i, tx := range txs {
+		result[i] = &dto.TransactionInfo{
+			ID:        tx.ID,
+			TxType:    tx.TxType,
+			RefType:   tx.RefType,
+			RefID:     tx.RefID,
+			Entries:   entriesByTx[tx.ID],
+			CreatedAt: tx.CreatedAt,
+		}
+	}
+
+	return result, total, nil
+}

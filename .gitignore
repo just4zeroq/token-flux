@@ -6,6 +6,12 @@ vendor/
 *.so
 *.dylib
 
+# Go binary output
+server/ai-platform
+server/ai-platform.exe
+server/cmd/node/node
+server/cmd/node/node.exe
+
 # Test binary
 *.test
 
@@ -16,13 +22,16 @@ vendor/
 temp/
 resource/public/
 
+# SQLite
+*.db
+
 # Node
 node_modules/
 dist/
 .turbo/
 
 # Tauri
-desktop/src-tauri/target/
+app/desktop/src-tauri/target/
 
 # IDE
 .idea/

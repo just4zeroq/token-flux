@@ -1,0 +1,68 @@
+# ai-platform — local dev environment
+# Usage: docker compose up -d
+# Stop:  docker compose down
+# Reset: docker compose down -v   (⚠️ drops DB)
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: 123456
+      POSTGRES_DB: flux
+    ports:
+      - "15432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    ports:
+      - "18080:8080"   # api
+      - "18081:8081"   # gateway
+      - "18082:8082"   # admin
+    environment:
+      AI_SERVER: all
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASS: "123456"
+      DB_NAME: flux
+      ADMIN_API_TOKEN: admin-dev-token
+      JWT_SECRET: change-me-in-prod
+      MODEL_KEY_ENCRYPTION_KEY: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+      REDIS_ADDRESS: redis:6379
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ./app/web
+      dockerfile: Dockerfile
+    ports:
+      - "18000:80"   # SPA + API proxy (nginx)
+    depends_on:
+      server:
+        condition: service_started
+
+volumes:
+  pgdata:

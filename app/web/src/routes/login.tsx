@@ -24,7 +24,7 @@ function LoginPage() {
     try {
       if (mode === 'login') {
         await login(email, password)
-        navigate({ to: '/dashboard' })
+        navigate({ to: '/console' })
       } else {
         await register(email, password)
         setMessage('Registration successful! Please sign in.')

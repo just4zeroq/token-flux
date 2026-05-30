@@ -13,6 +13,10 @@ type IBilling interface {
 	CreditAccount(ctx context.Context, in dto.CreditAccountIn) (*dto.TransactionInfo, error)
 	DebitAccount(ctx context.Context, in dto.DebitAccountIn) (*dto.TransactionInfo, error)
 	RechargeCredits(ctx context.Context, userID int64, amountCredits int64, refType string, refID int64) (*dto.TransactionInfo, error)
+
+	// Admin
+	ListAllAccounts(ctx context.Context, ownerType, asset string, page, pageSize int) ([]*dto.AccountInfo, int, error)
+	ListAllTransactions(ctx context.Context, page, pageSize int) ([]*dto.TransactionInfo, int, error)
 }
 
 var localBilling IBilling

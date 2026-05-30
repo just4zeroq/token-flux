@@ -17,6 +17,17 @@ type IIdentity interface {
 	CreateApiKey(ctx context.Context, userID int64, in dto.CreateApiKeyIn) (*dto.ApiKeyOut, error)
 	ListApiKeys(ctx context.Context, userID int64) ([]*dto.ApiKeyInfo, error)
 	DeleteApiKey(ctx context.Context, userID, keyID int64) error
+
+	// Admin
+	ListUsers(ctx context.Context, page, pageSize int, status, role *int, keyword string) ([]*dto.UserInfo, int, error)
+	CreateUser(ctx context.Context, in dto.CreateUserIn) (*dto.UserInfo, error)
+	UpdateUserStatus(ctx context.Context, userID int64, status int) error
+	UpdateUserRole(ctx context.Context, userID int64, role int) error
+
+	// Provider application
+	ApplyProvider(ctx context.Context, userID int64, in dto.ProviderApplicationIn) error
+	ListProviderApplications(ctx context.Context, page, pageSize int, status string) ([]*dto.ProviderApplicationInfo, int, error)
+	ReviewProviderApplication(ctx context.Context, appID int64, in dto.ReviewProviderApplicationIn) error
 }
 
 var localIdentity IIdentity

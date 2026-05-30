@@ -3,6 +3,11 @@ server:
     address: ":8080"
   gateway:
     address: ":8081"
+  admin:
+    apiToken: "admin-dev-token"
+
+modelKey:
+  encryptionKey: "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
 
 database:
   default:
@@ -38,6 +43,12 @@ wallet:
       api: "https://toncenter.com/api/v2"
       confirmations: 1
       poll_interval_seconds: 5
+
+redis:
+  default:
+    address: "127.0.0.1:6379"
+    db: 0
+    pass: ""
 
 usage:
   recorder:

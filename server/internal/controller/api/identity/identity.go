@@ -106,3 +106,18 @@ func DeleteKey(r *ghttp.Request) {
 	}
 	r.Response.WriteJson(map[string]any{"ok": true})
 }
+
+// POST /api/v1/provider/apply (public)
+func ApplyProvider(r *ghttp.Request) {
+	var in dto.ProviderApplicationIn
+	if err := r.Parse(&in); err != nil {
+		r.Response.WriteStatusExit(400, map[string]any{"code": 400, "message": "invalid params: " + err.Error()})
+		return
+	}
+	userID := middleware.GetUserID(r) // 0 if not logged in
+	if err := service.Identity().ApplyProvider(r.Context(), userID, in); err != nil {
+		r.Response.WriteStatusExit(400, map[string]any{"code": 400, "message": err.Error()})
+		return
+	}
+	r.Response.WriteJson(map[string]any{"ok": true, "message": "application submitted"})
+}
