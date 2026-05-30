@@ -2,7 +2,7 @@
 
 AI 能力交易市场 —— 连接模型提供商与消费者的开放平台。
 
-**核心价值：** Token (API Key) 在传统模式下各自绑定单一厂商和计费体系。Token Flux 将 Key 抽象为统一虚拟 Key，消费者只需一个 Key 即可访问多家 LLM 服务；Provider 可以托管自己的 API Key 或部署自托管网关，通过市场机制按服务质量、价格和信誉竞争流量，平台负责路由、计费、结算和纠纷仲裁。让 AI 能力像商品一样自由流通。
+**核心价值：** API Key 在传统模式下各自绑定单一厂商。Token Flux 将 Key 抽象为统一虚拟 Key，消费者只需一个 Key 即可访问多家 LLM 服务；Provider 托管 API Key 或部署本地节点，通过市场机制按价格和信誉竞争流量，平台负责路由、计费、结算。
 
 ---
 
@@ -10,137 +10,104 @@ AI 能力交易市场 —— 连接模型提供商与消费者的开放平台。
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    Web Frontend                      │
-│              React SPA (Vite) :80                    │
+│                  Web Frontend                        │
+│            React SPA (Vite) :5173 dev               │
+│            Tauri Desktop (packaged)                  │
 └──────────────────────┬──────────────────────────────┘
                        │ HTTP
 ┌──────────────────────▼──────────────────────────────┐
-│                   api-gateway                        │
-│                 HTTP :8080                           │
-└──────┬──────────────────────┬───────────────────────┘
-       │ gRPC                 │ gRPC
-┌──────▼──────────┐   ┌──────▼───────────────────────┐
-│    user-svc     │   │         asset-svc              │
-│   gRPC :8100    │   │       gRPC :8101               │
-│                 │   │                                │
-│ - register      │   │ - balance                      │
-│ - login         │   │ - transactions                 │
-│ - API keys      │   │ - usage records                │
-│ - token/        │   │ - orders                       │
-│   key validate  │   │                                │
-└─────────────────┘   └───────────────────────────────┘
-                              ▲
-                              │ gRPC
-                    ┌────────┴────────┐
-                    │   market-svc    │
-                    │  gRPC :8102     │
-                    │                 │
-                    │ - listings      │
-                    │ - trades        │
-                    └─────────────────┘
-
-┌─────────────────────────────────────────────────────┐
-│                   ai-gateway                         │
-│                 HTTP :8081                           │
+│                 GoFrame Monolith                     │
 │                                                      │
-│ - LLM API proxy                                      │
-│ - API key auth                                       │
-│ - Usage reporting                                    │
+│  :8080  API Server  (JWT auth, user + provider)     │
+│  :8081  Gateway     (API Key auth, OpenAI-compat)   │
+│  :8082  Admin       (Bearer token, management)      │
+│                                                      │
+│  internal/                                           │
+│  ├── controller/api/     (user endpoints)            │
+│  ├── controller/api/admin/ (management endpoints)    │
+│  ├── controller/gateway/ (LLM proxy)                 │
+│  ├── logic/              (business logic)            │
+│  ├── service/            (interface definitions)     │
+│  └── model/dto/          (request/response DTOs)     │
+│                                                      │
+│  pkg/translator/         (LLM format translation)    │
+│  cmd/node/               (local node binary)         │
+└─────────────────────────────────────────────────────┘
+                       │
+┌──────────────────────▼──────────────────────────────┐
+│                  PostgreSQL 16                       │
+│                  Redis (settlement)                  │
 └─────────────────────────────────────────────────────┘
 ```
 
-## Services
+## Servers
 
-| Service | Port | Protocol | Description |
-|---------|------|----------|-------------|
-| user-svc | 8100 | gRPC | User auth, API key management |
-| asset-svc | 8101 | gRPC | Balance, transactions, usage records, orders |
-| market-svc | 8102 | gRPC | Listings, trades |
-| api-gateway | 8080 | HTTP | REST API gateway → gRPC services |
-| ai-gateway | 8081 | HTTP | LLM proxy with API key auth and usage tracking |
-| web | 80 | HTTP | React SPA frontend |
+| Server | Port | Auth | Purpose |
+|--------|------|------|---------|
+| API | :8080 | JWT (HS256) | User + provider endpoints |
+| Gateway | :8081 | API Key (sk-xxx) | OpenAI-compatible LLM data-plane |
+| Admin | :8082 | Bearer token | Backend management |
 
 ## Tech Stack
 
-- **Backend**: Go (GoFrame v2.7.1), gRPC, Protocol Buffers
+- **Backend**: Go (GoFrame v2), PostgreSQL 16, Redis
 - **Frontend**: React 19, TanStack Router, TanStack Query, Zustand, Tailwind CSS v4
 - **Desktop**: Tauri (Rust)
-- **Database**: PostgreSQL 16
+- **i18n**: 5 languages (EN / ZH / JA / KO / VI)
 - **Container**: Docker, docker-compose
 
 ## Quick Start
 
-### One-click start (all services)
-
 ```bash
-cd server/docker && bash start.sh
+# Start PostgreSQL + Redis
+docker compose up -d postgres redis
+
+# Start backend
+cd server && go run .
+
+# Start frontend
+cd app/web && npm run dev
 ```
 
-### Per-service (independent deployment)
+## Config
 
-```bash
-cd server/user-svc    && docker compose up -d    # postgres + asset-svc + user-svc
-cd server/asset-svc   && docker compose up -d    # postgres + asset-svc
-cd server/market-svc  && docker compose up -d    # postgres + market-svc
-cd server/api-gateway && docker compose up -d    # postgres + user-svc + asset-svc + api-gateway
-cd server/ai-gateway  && docker compose up -d    # postgres + user-svc + asset-svc + ai-gateway
-```
-
-### Local development
-
-```bash
-# Start PostgreSQL
-cd server/docker && docker compose up -d postgres
-
-# Run migrations
-cd server/docker && bash migrate.sh
-
-# Start a Go service
-cd server/user-svc && go run .
-
-# Start web frontend
-cd app/web && npm install && npm run dev
-```
-
-## Environment Variables
-
-| Variable | Default | Description |
-|----------|---------|-------------|
-| `DB_HOST` | `localhost` | Database server hostname |
-| `USER_SVC_ADDR` | `localhost:8100` | user-svc gRPC address |
-| `ASSET_SVC_ADDR` | `localhost:8101` | asset-svc gRPC address |
-
-Set in docker-compose `environment:` — entrypoint.sh substitutes at container startup.
+`server/manifest/config/config.yaml` — database, JWT, wallet, redis settings.
 
 ## Database Migrations
 
-Uses [Goose](https://github.com/pressly/goose) for SQL migrations:
+Goose SQL migrations in `server/migrations/`:
 
-```bash
-# One-click all migrations
-cd server/docker && bash migrate.sh
-
-# Per service
-goose -dir server/user-svc/migrations postgres \
-  "postgres://aiplatform:aiplatform@localhost:5432/user_svc?sslmode=disable" up
+```
+0001_identity.sql
+0002_wallet.sql
+0003_billing.sql
+0004_llm.sql
+0005_settlement.sql
+0006_invoices.sql
+0007_payment.sql
+0008-0014  provider applications, settlement cycle, system configs, etc.
+0015_developers.sql
+0016_system_configs_add_name.sql
+0017_developers_reputation.sql
 ```
 
 ## Project Structure
 
 ```
-ai-platform/
-├── server/
-│   ├── api/              ← Shared proto module (.pb.go)
-│   ├── user-svc/         ← gRPC :8100
-│   ├── asset-svc/        ← gRPC :8101
-│   ├── market-svc/       ← gRPC :8102
-│   ├── api-gateway/      ← HTTP :8080
-│   ├── ai-gateway/       ← HTTP :8081
-│   ├── proto/            ← Proto source definitions
-│   ├── scripts/          ← Database init scripts
-│   └── docker/           ← Dockerfiles, compose, entrypoint, migrations
+├── server/                  ← GoFrame monolith
+│   ├── internal/            ← controllers, logic, service, dto
+│   ├── migrations/          ← goose SQL migrations
+│   ├── pkg/translator/      ← LLM format translators
+│   ├── cmd/node/            ← local node binary
+│   └── manifest/config/     ← GoFrame config YAML
 ├── app/
-│   ├── web/              ← React SPA (Vite)
-│   └── desktop/          ← Tauri desktop app
-└── CLAUDE.md
+│   ├── web/                 ← React SPA (Vite)
+│   └── desktop/             ← Tauri desktop app
+├── docs/design/             ← design documents
+├── docker-compose.yml       ← dev environment
+└── CLAUDE.md                ← AI coding assistant context
 ```
+
+## License
+
+Private.
