@@ -193,21 +193,15 @@ Consumer Client                               Platform Hub
       │                                            │
       │← {                                        │
       │     nodes: [                               │
-      │       { rank: 1,                           │
-      │         node_id: "p-a",                    │
+      │       { rank: 1, node_id: "p-a",             │
       │         netbird_ip: "100.64.0.3",         │
-      │         score: 0.87,                       │
-      │         reason: "Best price match" },       │  ← explainable
-      │       { rank: 2,                           │
-      │         node_id: "p-b",                    │
+      │         score: 0.87 },                     │
+      │       { rank: 2, node_id: "p-b",           │
       │         netbird_ip: "100.64.0.4",         │
-      │         score: 0.74,                       │
-      │         reason: "Good reputation" },        │
-      │       { rank: 3,                           │
-      │         node_id: "platform",               │
+      │         score: 0.74 },                     │
+      │       { rank: 3, node_id: "platform",      │
       │         netbird_ip: "100.64.0.2",         │
-      │         score: 0.62,                       │
-      │         reason: "Official provider" }       │
+      │         score: 0.62 }                      │
       │     ]                                      │
       │   }                                        │
       │                                            │
@@ -281,7 +275,7 @@ POST /api/v1/nodes/route
   "favorites": ["node-X"],
   "blocked": ["node-Y"]
 }
-→ { nodes: [{ rank, node_id, netbird_ip, score, reason }] }
+→ { nodes: [{ rank, node_id, netbird_ip, score }] }
 ```
 
 ### 5.2 Routing Config (platform-pushed)
@@ -385,7 +379,18 @@ Tauri Desktop App
 - Batch boost/penalty controls
 - Routing config editor (weights, thresholds)
 - Promoted slot management
-- Audit log of routing decisions
+#### 6.2.1 Route Visibility
+
+平台通过以下方式知道当前 P2P 通信状态：
+
+| 信息 | 来源 | 内容 |
+|------|------|------|
+| **谁请求了路由** | `POST /api/v1/nodes/route` | consumer_user_id, model, preference |
+| **推荐了谁** | 平台算法 | 返回的 ranked node list |
+| **实际连了谁** | 双上报 | `request_id` 关联 → 确认 consumer ↔ provider |
+| **通信量多大** | 双上报 | tokens, cost, latency_ms |
+
+数据流量（chat content）不经平台，但平台知道**谁和谁在通信、什么模型、用了多少**。
 
 ---
 
