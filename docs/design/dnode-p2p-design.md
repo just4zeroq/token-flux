@@ -4,7 +4,7 @@
 
 ## Overview
 
-dnode replaces the platform-centric forwarding model with an overlay P2P network where consumers connect directly to providers. The platform becomes a **node on equal footing** — acting as both an official provider and the Hub registry, but data-plane traffic bypasses the platform entirely.
+dnode replaces the platform-centric forwarding model with an overlay P2P network. Consumers connect directly to providers over NetBird WireGuard mesh. The platform becomes a **node on equal footing** but retains **routing control** — the platform runs a recommendation algorithm that scores and ranks providers for each request. Consumers express preferences (cheap/fast/favorite), but the platform decides the final route.
 
 ---
 
@@ -90,9 +90,73 @@ Token Flux P2P Network (NetBird WireGuard Mesh · 100.64.0.0/16)
 
 ---
 
-## 3. Message Flows
+## 3. Routing Control Model
 
-### 3.1 Registration
+**Platform controls routing. Consumers express preferences.**
+
+```
+Consumer preferences { "cheap", "fast", "favorite_node_X" }
+         ↓
+Platform Recommendation Engine
+  ├── Consumer preference signal (20%)
+  ├── Provider quality metrics (30%)
+  ├── Platform operational strategy (50%)  ← 扶持新节点、打压违规、商业推广
+  ↓
+Scored & ranked provider list
+  ↓
+Consumer client → try nodes in order → fallback on failure
+```
+
+### 3.1 Routing Algorithm
+
+**Scoring formula (platform-side):**
+
+```
+score = W_price × (1 - normalized_price)
+      + W_reputation × normalized_reputation
+      + W_latency × (1 - normalized_latency)
+      + platform_boost
+      - platform_penalty
+```
+
+**Platform operational levers:**
+
+| Lever | Effect | Example |
+|-------|--------|---------|
+| `platform_boost` | 冷启动：新供应商自动加分 | 新注册Provider +0.15 持续7天 |
+| `platform_penalty` | 违规降权 | 虚报用量 -0.30 |
+| `blacklist` | 下架 | 严重违规直接不在结果中出现 |
+| `min_reputation` | 质量门槛 | 信誉分<60 不推荐 |
+| `max_latency` | 延迟门槛 | 延迟>500ms 不推荐 |
+| `promoted_slot` | 商业化 | 竞价排名置顶 |
+
+### 3.2 Consumer Preferences
+
+```json
+// Consumer sets in client settings
+{
+  "preference": "cheap",       // "cheap" | "fast" | "quality" | "balanced"
+  "favorites": ["node-X"],     // personal favorite providers (soft boost)
+  "blocked": ["node-Y"]        // blacklisted providers (forced exclude)
+}
+```
+
+**How preferences affect weights:**
+
+| Preference | W_price | W_reputation | W_latency |
+|------------|---------|-------------|-----------|
+| `cheap` | 0.6 | 0.2 | 0.2 |
+| `fast` | 0.2 | 0.2 | 0.6 |
+| `quality` | 0.2 | 0.6 | 0.2 |
+| `balanced` | 0.33 | 0.33 | 0.33 |
+
+**Advanced mode:** Expert users can pin a specific provider (bypass algorithm), but the provider must still be in the platform's approved list.
+
+---
+
+## 4. Message Flows
+
+### 4.1 Registration
 
 ```
 Provider Client                    Platform Hub
@@ -110,32 +174,47 @@ Provider Client                    Platform Hub
       │← { ok: true, registered_at } ────│
 ```
 
-### 3.2 Discovery
+### 4.2 Routing Request (Platform Decides)
 
 ```
-Consumer Client                   Platform Hub
-      │                                │
-      │── GET /api/v1/nodes/discover   │
-      │     ?model=deepseek-v4-flash ──→│
-      │                                │
-      │← { nodes: [                    │
-      │     { node_id: "p-a",          │
-      │       netbird_ip: "100.64.0.3",│
-      │       input_price: 50,         │
-      │       output_price: 150,       │
-      │       reputation: 95,          │
-      │       latency_ms: 15 },         │
-      │     { node_id: "platform",     │            ← 平台自身也是 Provider
-      │       netbird_ip: "100.64.0.2",│
-      │       input_price: 100,        │
-      │       output_price: 300,       │
-      │       reputation: 100 }        │
-      │   ] }                          │
-      │                                │
-      │  (Consumer 按 price/reputation/latency 选择 Provider)  │
+Consumer Client                               Platform Hub
+      │                                            │
+      │── POST /api/v1/nodes/route                │
+      │   { model: "deepseek-v4-flash",           │
+      │     preference: "cheap",                   │  ← consumer expresses intent
+      │     favorites: ["node-X"],                 │
+      │     blocked: ["node-Y"] }                  │
+      │──────────────────────────────────────────→│
+      │                                            │  Platform runs recommendation:
+      │                                            │  1. Query eligible providers
+      │                                            │  2. Apply consumer preference weights
+      │                                            │  3. Apply platform operational levers
+      │                                            │  4. Score + rank + return top N
+      │                                            │
+      │← {                                        │
+      │     nodes: [                               │
+      │       { rank: 1,                           │
+      │         node_id: "p-a",                    │
+      │         netbird_ip: "100.64.0.3",         │
+      │         score: 0.87,                       │
+      │         reason: "Best price match" },       │  ← explainable
+      │       { rank: 2,                           │
+      │         node_id: "p-b",                    │
+      │         netbird_ip: "100.64.0.4",         │
+      │         score: 0.74,                       │
+      │         reason: "Good reputation" },        │
+      │       { rank: 3,                           │
+      │         node_id: "platform",               │
+      │         netbird_ip: "100.64.0.2",         │
+      │         score: 0.62,                       │
+      │         reason: "Official provider" }       │
+      │     ]                                      │
+      │   }                                        │
+      │                                            │
+      │  (Consumer client tries nodes in order)    │
 ```
 
-### 3.3 Direct Chat (P2P)
+### 4.3 Direct Chat (P2P)
 
 ```
 Consumer Client                              Provider Client
@@ -156,7 +235,7 @@ Consumer Client                              Provider Client
       │← { "done", usage: { tokens: 1500, ... } } │
 ```
 
-### 3.4 Dual Usage Reporting
+### 4.4 Dual Usage Reporting
 
 ```
                     Platform Hub
@@ -180,16 +259,47 @@ Consumer reports   │              │  Provider reports
 
 ---
 
-## 4. Platform Hub API
+## 5. Platform Hub API
 
 | Endpoint | Method | Auth | Description |
 |----------|--------|------|-------------|
 | `/api/v1/nodes/register` | POST | JWT (provider) | Register/update provider node |
 | `/api/v1/nodes/unregister` | POST | JWT (provider) | Remove node |
-| `/api/v1/nodes/discover` | GET | JWT | Find providers for a model |
+| `/api/v1/nodes/route` | POST | JWT | **Platform routes consumer to providers** (replaces discovery) |
+| `/api/v1/nodes/routing-config` | GET | JWT | Get platform routing config (weights, thresholds, blacklist) |
 | `/api/v1/nodes/heartbeat` | POST | JWT | Node alive check |
 | `/api/v1/nodes/report-usage` | POST | JWT | Submit usage record |
 | `/api/v1/nodes/{id}` | GET | JWT | Get node detail |
+
+### 5.1 Route Request
+
+```
+POST /api/v1/nodes/route
+{
+  "model": "deepseek-v4-flash",
+  "preference": "cheap",
+  "favorites": ["node-X"],
+  "blocked": ["node-Y"]
+}
+→ { nodes: [{ rank, node_id, netbird_ip, score, reason }] }
+```
+
+### 5.2 Routing Config (platform-pushed)
+
+```
+GET /api/v1/nodes/routing-config
+→ {
+  "global": {
+    "weights": { "price": 0.33, "reputation": 0.33, "latency": 0.33 },
+    "thresholds": { "min_reputation": 60, "max_latency_ms": 500 },
+    "blacklist": ["node-bad"],
+    "boost_map": { "node-new": 0.15 }
+  },
+  "per_model_overrides": {
+    "deepseek-v4-pro": { "min_reputation": 80 }
+  }
+}
+```
 
 ### Node table (in platform DB)
 
@@ -256,7 +366,30 @@ Tauri Desktop App
 
 ---
 
-## 6. Migration Path
+## 6. Admin Node Management
+
+### 6.1 Admin API (platform :8082)
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/admin/nodes` | List all registered nodes |
+| `PUT /api/admin/nodes/:id/review` | Approve/reject node |
+| `PUT /api/admin/nodes/:id/boost` | Set platform boost/penalty |
+| `PUT /api/admin/nodes/:id/blacklist` | Blacklist/unblacklist node |
+| `GET /api/admin/nodes/:id/stats` | Node statistics |
+| `PUT /api/admin/routing-config` | Update global routing config |
+
+### 6.2 Admin UI
+
+- Node list with status, uptime, reputation
+- Batch boost/penalty controls
+- Routing config editor (weights, thresholds)
+- Promoted slot management
+- Audit log of routing decisions
+
+---
+
+## 7. Migration Path
 
 ```
 Phase 1 (current): Forwarding WS Tunnel  ← 已完成，平台集中转发
@@ -273,7 +406,7 @@ Hybrid Mode: both can coexist
 
 ---
 
-## 7. Security
+## 8. Security
 
 | Concern | Mitigation |
 |---------|------------|
@@ -285,7 +418,7 @@ Hybrid Mode: both can coexist
 
 ---
 
-## 8. Recommendation
+## 9. Recommendation
 
 **P2P Direct is the better long-term architecture:**
 
