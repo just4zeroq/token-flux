@@ -143,6 +143,7 @@ func RunAPI(which string) {
 					v1.POST("/chat/completions", gateway.RelayChatCompletions)
 					v1.POST("/completions", gateway.RelayCompletions)
 					v1.POST("/embeddings", gateway.RelayEmbeddings)
+					v1.POST("/responses", gateway.RelayResponses)
 					v1.POST("/messages", gateway.RelayChatCompletions) // Claude native path
 				})
 		})

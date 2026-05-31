@@ -52,3 +52,5 @@ Thumbs.db
 
 # Claude Code worktrees / local state
 .claude/
+server/ai-platform~
+.reasonix/

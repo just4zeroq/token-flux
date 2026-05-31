@@ -5,7 +5,6 @@ import "encoding/json"
 // ========== Responses API 请求 ==========
 
 // OpenAIResponsesRequest OpenAI Responses API 请求
-// https://platform.openai.com/docs/api-reference/responses/create
 type OpenAIResponsesRequest struct {
 	Model                string          `json:"model"`
 	Input                json.RawMessage `json:"input,omitempty"`
@@ -39,7 +38,6 @@ type OpenAIResponsesRequest struct {
 	SafetyIdentifier     string          `json:"safety_identifier,omitempty"`
 }
 
-// Reasoning 推理参数（用于 o1/o3 等推理模型）
 type Reasoning struct {
 	Effort  string `json:"effort,omitempty"`
 	Summary string `json:"summary,omitempty"`
@@ -47,7 +45,6 @@ type Reasoning struct {
 
 // ========== Responses API 响应 ==========
 
-// OpenAIResponsesResponse Responses API 非流式响应
 type OpenAIResponsesResponse struct {
 	ID                   string              `json:"id"`
 	Object               string              `json:"object"`
@@ -84,12 +81,6 @@ type OpenAIResponsesResponse struct {
 	Metadata             any                 `json:"metadata"`
 }
 
-// IncompleteDetails 不完整响应详情
-type IncompleteDetails struct {
-	Reason string `json:"reason,omitempty"`
-}
-
-// ResponsesUsage Responses API 使用量（字段名与 Chat Completions 不同）
 type ResponsesUsage struct {
 	InputTokens        int                 `json:"input_tokens"`
 	OutputTokens       int                 `json:"output_tokens"`
@@ -98,23 +89,19 @@ type ResponsesUsage struct {
 	OutputTokenDetails *OutputTokenDetails `json:"output_tokens_details"`
 }
 
-// ResponsesReasoning 推理配置（响应中的 reasoning 字段）
 type ResponsesReasoning struct {
 	Effort  any `json:"effort"`
 	Summary any `json:"summary"`
 }
 
-// ResponsesText 文本配置（响应中的 text 字段）
 type ResponsesText struct {
 	Format ResponsesTextFormat `json:"format"`
 }
 
-// ResponsesTextFormat 文本格式
 type ResponsesTextFormat struct {
 	Type string `json:"type"`
 }
 
-// InputTokenDetails 输入 token 细分
 type InputTokenDetails struct {
 	CachedTokens int `json:"cached_tokens"`
 	TextTokens   int `json:"text_tokens,omitempty"`
@@ -122,7 +109,6 @@ type InputTokenDetails struct {
 	ImageTokens  int `json:"image_tokens,omitempty"`
 }
 
-// OutputTokenDetails 输出 token 细分
 type OutputTokenDetails struct {
 	TextTokens               int `json:"text_tokens,omitempty"`
 	AudioTokens              int `json:"audio_tokens,omitempty"`
@@ -131,11 +117,6 @@ type OutputTokenDetails struct {
 	RejectedPredictionTokens int `json:"rejected_prediction_tokens,omitempty"`
 }
 
-// ResponsesOutput 响应输出项（通用结构，支持所有 output item 类型）
-// 具体 type 包括：message、function_call、web_search_call、file_search_call、
-// computer_call、reasoning、image_generation_call、code_interpreter_call、
-// shell_call、local_shell_call、apply_patch_call、mcp_call、mcp_list_tools、
-// mcp_approval_request、custom_tool_call、compaction
 type ResponsesOutput struct {
 	Type      string                   `json:"type"`
 	ID        string                   `json:"id"`
@@ -172,35 +153,26 @@ type ResponsesOutput struct {
 	ApprovalRequestID string `json:"approval_request_id,omitempty"`
 	// mcp_list_tools
 	Tools []ResponsesMCPTool `json:"tools,omitempty"`
-	// mcp_approval_request
 	// custom_tool_call
 	Input string `json:"input,omitempty"`
 }
 
-// ResponsesOutputContent 响应输出内容块
 type ResponsesOutputContent struct {
 	Type        string                `json:"type"`
 	Text        string                `json:"text,omitempty"`
 	Annotations []ResponsesAnnotation `json:"annotations,omitempty"`
-	// refusal 内容类型
-	Refusal string `json:"refusal,omitempty"`
-	// reasoning_text 内容类型
+	Refusal     string                `json:"refusal,omitempty"`
 }
 
-// ResponsesAnnotation 注解类型（联合结构，支持所有注解子类型）
 type ResponsesAnnotation struct {
 	Type     string `json:"type"`
 	FileID   string `json:"file_id,omitempty"`
 	Filename string `json:"filename,omitempty"`
 	Index    int    `json:"index,omitempty"`
-	// url_citation
-	URL        string `json:"url,omitempty"`
-	Title      string `json:"title,omitempty"`
-	StartIndex int    `json:"start_index,omitempty"`
-	EndIndex   int    `json:"end_index,omitempty"`
+	URL      string `json:"url,omitempty"`
+	Title    string `json:"title,omitempty"`
 }
 
-// ResponsesWebSearchAction Web 搜索动作
 type ResponsesWebSearchAction struct {
 	Type    string                     `json:"type"`
 	Query   string                     `json:"query,omitempty"`
@@ -209,34 +181,29 @@ type ResponsesWebSearchAction struct {
 	Sources []ResponsesWebSearchSource `json:"sources,omitempty"`
 }
 
-// ResponsesWebSearchSource Web 搜索来源
 type ResponsesWebSearchSource struct {
 	Type string `json:"type"`
 	URL  string `json:"url,omitempty"`
 }
 
-// ResponsesFileSearchResult 文件搜索结果项
 type ResponsesFileSearchResult struct {
 	FileID string  `json:"file_id"`
 	Text   string  `json:"text"`
 	Score  float64 `json:"score"`
 }
 
-// ResponsesSafetyCheck 安全检查项
 type ResponsesSafetyCheck struct {
 	ID      string `json:"id"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
 }
 
-// ResponsesCodeInterpreterOutput 代码解释器输出
 type ResponsesCodeInterpreterOutput struct {
 	Type string `json:"type"`
 	Logs string `json:"logs,omitempty"`
 	URL  string `json:"url,omitempty"`
 }
 
-// ResponsesShellAction Shell 命令动作
 type ResponsesShellAction struct {
 	Type             string            `json:"type"`
 	Command          []string          `json:"command,omitempty"`
@@ -247,14 +214,12 @@ type ResponsesShellAction struct {
 	WorkingDirectory string            `json:"working_directory,omitempty"`
 }
 
-// ResponsesPatchAction 补丁动作
 type ResponsesPatchAction struct {
 	Type  string `json:"type"`
 	Path  string `json:"path,omitempty"`
 	Patch string `json:"patch,omitempty"`
 }
 
-// ResponsesMCPTool MCP 工具描述
 type ResponsesMCPTool struct {
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
@@ -264,7 +229,6 @@ type ResponsesMCPTool struct {
 
 // ========== Responses API 流式响应 ==========
 
-// ResponsesStreamResponse 流式事件包装
 type ResponsesStreamResponse struct {
 	Type         string                   `json:"type"`
 	Response     *OpenAIResponsesResponse `json:"response,omitempty"`
@@ -277,16 +241,11 @@ type ResponsesStreamResponse struct {
 	Part         *ResponsesSummaryPart    `json:"part,omitempty"`
 }
 
-// ResponsesSummaryPart 推理摘要部分
 type ResponsesSummaryPart struct {
 	Type string `json:"type"`
 	Text string `json:"text"`
 }
 
-// HasError 检查响应是否包含错误
 func (r *OpenAIResponsesResponse) HasError() bool {
-	if r.Error == nil {
-		return false
-	}
-	return true
+	return r.Error != nil
 }

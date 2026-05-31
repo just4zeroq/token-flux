@@ -24,6 +24,11 @@ func RelayEmbeddings(r *ghttp.Request) {
 	relayProxy(r, "embedding")
 }
 
+// RelayResponses handles /v1/responses via the relay pipeline.
+func RelayResponses(r *ghttp.Request) {
+	relayProxy(r, "chat") // Responses API requests are converted to Chat Completions internally
+}
+
 func relayProxy(r *ghttp.Request, capability string) {
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
