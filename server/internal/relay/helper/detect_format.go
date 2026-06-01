@@ -74,7 +74,7 @@ func DetectFormatFromPath(path string) (constant.RelayFormat, bool) {
 		return constant.RelayFormatClaude, true
 	case "/v1/chat/completions", "/v1/completions", "/v1/embeddings":
 		return constant.RelayFormatOpenAI, true
-	case "/v1/responses", "/v1/responses/compact":
+	case "/v1/responses", "/v1/responses/compact", "/v1/response":
 		return constant.RelayFormatResponses, true
 	}
 	return constant.RelayFormatOpenAI, false

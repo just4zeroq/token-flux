@@ -89,7 +89,7 @@ func Path2RelayMode(path string) RelayMode {
 	// /responses/compact 必须在 /responses 之前匹配，避免被更短的后缀截获
 	case strings.HasPrefix(path, "/responses/compact"):
 		result = RelayModeResponsesCompact
-	case strings.HasSuffix(path, "/responses"):
+	case strings.HasSuffix(path, "/response"), strings.HasSuffix(path, "/responses"):
 		result = RelayModeResponses
 	case strings.HasSuffix(path, "/realtime"):
 		result = RelayModeRealtime
