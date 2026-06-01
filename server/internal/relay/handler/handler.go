@@ -558,8 +558,8 @@ func extractOutputFormat(body []byte) outputFormatValue {
 		return outputFormatValue{constant.RelayFormatClaude}
 	case "gemini":
 		return outputFormatValue{constant.RelayFormatGemini}
-	case "responses":
-		return outputFormatValue{constant.RelayFormatResponses}
+	case "openai_responses":
+		return outputFormatValue{constant.RelayFormatOpenAIResponses}
 	default:
 		return outputFormatValue{}
 	}

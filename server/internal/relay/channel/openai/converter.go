@@ -35,7 +35,7 @@ func ConvertToOpenAI(requestBody []byte, info *common.RelayInfo) ([]byte, error)
 			return nil, err
 		}
 		return io.ReadAll(r)
-	case constant.RelayFormatResponses:
+	case constant.RelayFormatOpenAIResponses:
 		r, err := ConvertResponsesToOpenAI(requestBody, info)
 		if err != nil {
 			return nil, err

@@ -8,5 +8,5 @@ const (
 	RelayFormatOpenAI    RelayFormat = "openai"    // OpenAI Chat Completions / Completions / Embeddings 等格式
 	RelayFormatClaude    RelayFormat = "claude"    // Claude Messages API 格式
 	RelayFormatGemini    RelayFormat = "gemini"    // Google Gemini API 格式
-	RelayFormatResponses RelayFormat = "responses" // OpenAI Responses API 格式
+	RelayFormatOpenAIResponses RelayFormat = "openai_responses" // OpenAI Responses API 格式
 )

@@ -30,7 +30,7 @@ func DetectInboundFormat(body []byte) constant.RelayFormat {
 	// Check Responses API: has "input" field (not "messages").
 	if _, hasInput := obj["input"]; hasInput {
 		if _, hasMessages := obj["messages"]; !hasMessages {
-			return constant.RelayFormatResponses
+			return constant.RelayFormatOpenAIResponses
 		}
 	}
 
@@ -75,7 +75,7 @@ func DetectFormatFromPath(path string) (constant.RelayFormat, bool) {
 	case "/v1/chat/completions", "/v1/completions", "/v1/embeddings":
 		return constant.RelayFormatOpenAI, true
 	case "/v1/responses", "/v1/responses/compact", "/v1/response":
-		return constant.RelayFormatResponses, true
+		return constant.RelayFormatOpenAIResponses, true
 	}
 	return constant.RelayFormatOpenAI, false
 }
@@ -105,7 +105,7 @@ func BestProtocolMatch(protocolsJSON map[string]map[string]string, inboundFormat
 		preferredKey = "anthropic-compatible"
 	case constant.RelayFormatGemini:
 		preferredKey = "gemini-compatible"
-	case constant.RelayFormatResponses:
+	case constant.RelayFormatOpenAIResponses:
 		preferredKey = "openai-compatible" // Responses → OpenAI
 	}
 

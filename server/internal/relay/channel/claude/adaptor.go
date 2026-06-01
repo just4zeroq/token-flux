@@ -73,7 +73,7 @@ func (a *Adaptor) ConvertRequest(ctx context.Context, info *common.RelayInfo, re
 			return nil, err
 		}
 		converted = r
-	case constant.RelayFormatResponses:
+	case constant.RelayFormatOpenAIResponses:
 		r, err := ConvertResponsesToClaude(requestBody, info)
 		if err != nil {
 			return nil, err

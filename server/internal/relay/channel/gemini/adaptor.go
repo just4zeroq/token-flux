@@ -110,7 +110,7 @@ func (a *Adaptor) ConvertRequest(ctx context.Context, info *common.RelayInfo, re
 			return nil, err
 		}
 		converted = r
-	case constant.RelayFormatResponses:
+	case constant.RelayFormatOpenAIResponses:
 		r, err := ConvertResponsesToGemini(requestBody, info)
 		if err != nil {
 			return nil, err

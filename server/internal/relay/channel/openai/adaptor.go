@@ -128,7 +128,7 @@ func (a *Adaptor) ConvertRequest(ctx context.Context, info *common.RelayInfo, re
 			return nil, err
 		}
 		converted = r
-	case constant.RelayFormatResponses:
+	case constant.RelayFormatOpenAIResponses:
 		r, err := ConvertResponsesToOpenAI(requestBody, info)
 		if err != nil {
 			return nil, err
@@ -224,7 +224,7 @@ func (a *Adaptor) DoResponse(ctx context.Context, resp *http.Response, info *com
 			return handleGeminiInboundStream(ctx, resp, info, writer)
 		}
 		return handleGeminiInboundNonStream(ctx, resp, info, writer)
-	case constant.RelayFormatResponses:
+	case constant.RelayFormatOpenAIResponses:
 		if info.IsStream {
 			return a.handleResponsesInboundStream(ctx, resp, info, writer)
 		}
