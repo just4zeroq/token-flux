@@ -3,6 +3,7 @@ module ai-platform
 go 1.26.2
 
 require (
+	ai-platform/pkg v0.0.0
 	github.com/go-pay/gopay v1.5.118
 	github.com/gogf/gf/contrib/drivers/pgsql/v2 v2.10.0
 	github.com/gogf/gf/contrib/nosql/redis/v2 v2.10.0
@@ -84,3 +85,5 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 )
+
+replace ai-platform/pkg => ../pkg

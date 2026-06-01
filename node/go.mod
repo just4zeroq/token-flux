@@ -3,7 +3,7 @@ module ai-platform-node
 go 1.26.2
 
 require (
-	ai-platform v0.0.0
+	ai-platform/pkg v0.0.0
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
 	github.com/wailsapp/wails/v2 v2.12.0
@@ -45,4 +45,4 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace ai-platform => ../server
+replace ai-platform/pkg => ../pkg
