@@ -3,7 +3,7 @@ module ai-platform-desktop
 go 1.26.2
 
 require (
-	ai-platform-node v0.0.0
+	ai-platform-node/pkg v0.0.0
 	github.com/wailsapp/wails/v2 v2.12.0
 )
 
@@ -47,6 +47,6 @@ require (
 )
 
 replace (
-	ai-platform-node => ..
+	ai-platform-node/pkg => ../pkg
 	ai-platform/pkg => ../../pkg
 )
