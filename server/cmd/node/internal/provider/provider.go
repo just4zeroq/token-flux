@@ -2,20 +2,22 @@ package provider
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
-	"net/http"
 	"strings"
-	"time"
 
 	"ai-platform/cmd/node/internal/keychain"
 	"ai-platform/cmd/node/internal/types"
+	pkgprovider "ai-platform/pkg/provider"
+	"ai-platform/pkg/translator"
 )
 
-// Execute forwards a chat request to the upstream provider.
+// defaultProvider is a shared OpenAI-compatible HTTP provider used by the node.
+var defaultProvider = pkgprovider.New("openai")
+
+// Execute forwards a chat request to the upstream provider using pkg/provider + pkg/translator.
 func Execute(ctx context.Context, req *types.RequestEnvelope, keyHash string) (*types.ChatResponse, error) {
 	entry, err := keychain.FindKeyByHash(keyHash)
 	if err != nil {
@@ -24,33 +26,33 @@ func Execute(ctx context.Context, req *types.RequestEnvelope, keyHash string) (*
 
 	body, _ := json.Marshal(req.Request)
 
-	baseURL := urlFor(entry)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(body))
+	// Normalize to OpenAI format if needed (node receives raw format from local tools).
+	normalized, err := translator.Normalize(body, translator.FormatOpenAI)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("normalize: %w", err)
 	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+entry.Key)
 
-	resp, err := http.DefaultClient.Do(httpReq)
+	baseURL := urlFor(entry)
+	resp, err := defaultProvider.Call(ctx, entry.Key, baseURL, normalized)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("call: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != 200 {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-		return nil, fmt.Errorf("upstream %d: %s", resp.StatusCode, string(body))
+		b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return nil, fmt.Errorf("upstream %d: %s", resp.StatusCode, string(b))
 	}
 
+	respBody, _ := io.ReadAll(resp.Body)
 	var cr types.ChatResponse
-	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
-		return nil, fmt.Errorf("decode response: %w", err)
+	if err := json.Unmarshal(respBody, &cr); err != nil {
+		return nil, fmt.Errorf("decode: %w", err)
 	}
 	return &cr, nil
 }
 
-// ExecuteStream forwards a chat request and returns a channel of SSE chunks.
+// ExecuteStream forwards a streaming request using the shared provider + translator.
 func ExecuteStream(ctx context.Context, req *types.RequestEnvelope, keyHash string) (<-chan *types.ChunkData, <-chan error) {
 	chunks := make(chan *types.ChunkData, 64)
 	errs := make(chan error, 1)
@@ -67,16 +69,14 @@ func ExecuteStream(ctx context.Context, req *types.RequestEnvelope, keyHash stri
 		req.Request.Stream = true
 		body, _ := json.Marshal(req.Request)
 
-		baseURL := urlFor(entry)
-		httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/chat/completions", bytes.NewReader(body))
+		normalized, err := translator.Normalize(body, translator.FormatOpenAI)
 		if err != nil {
 			errs <- err
 			return
 		}
-		httpReq.Header.Set("Content-Type", "application/json")
-		httpReq.Header.Set("Authorization", "Bearer "+entry.Key)
 
-		resp, err := http.DefaultClient.Do(httpReq)
+		baseURL := urlFor(entry)
+		resp, err := defaultProvider.Call(ctx, entry.Key, baseURL, normalized)
 		if err != nil {
 			errs <- err
 			return
@@ -84,8 +84,8 @@ func ExecuteStream(ctx context.Context, req *types.RequestEnvelope, keyHash stri
 		defer resp.Body.Close()
 
 		if resp.StatusCode != 200 {
-			body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-			errs <- fmt.Errorf("upstream %d: %s", resp.StatusCode, string(body))
+			b, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+			errs <- fmt.Errorf("upstream %d: %s", resp.StatusCode, string(b))
 			return
 		}
 
@@ -120,20 +120,4 @@ func urlFor(e *types.KeyEntry) string {
 		return strings.TrimRight(e.BaseURL, "/")
 	}
 	return "https://api.openai.com/v1"
-}
-
-// LogUsage writes a usage entry.
-func LogUsage(requestID, model string, tokens, costCredits, latencyMs int, success bool) {
-	s := 0
-	if success {
-		s = 1
-	}
-	// db call omitted for brevity — stored in memory or SQLite
-	_ = requestID
-	_ = model
-	_ = tokens
-	_ = costCredits
-	_ = latencyMs
-	_ = s
-	_ = time.Now
 }
