@@ -15,6 +15,8 @@ import (
 	"ai-platform/internal/relay/constant"
 	"ai-platform/internal/relay/helper"
 	"ai-platform/internal/relay/override"
+
+	"ai-platform/pkg/translator"
 )
 
 // Adaptor OpenAI 供应商适配器
@@ -103,6 +105,35 @@ func (a *Adaptor) SetupRequestHeader(header http.Header, info *common.RelayInfo)
 	return nil
 }
 
+// relayFormatToTranslator maps platform relay format constants to pkg/translator.Format.
+func relayFormatToTranslator(f constant.RelayFormat) translator.Format {
+	switch f {
+	case constant.RelayFormatClaude:
+		return translator.FormatClaude
+	case constant.RelayFormatGemini:
+		return translator.FormatGemini
+	case constant.RelayFormatOpenAIResponses:
+		return translator.FormatOpenAIResponses
+	default:
+		return translator.FormatOpenAI
+	}
+}
+
+// convertInboundToOpenAI converts any inbound format body to OpenAI Chat Completions
+// using the shared pkg/translator package.
+func convertInboundToOpenAI(f constant.RelayFormat, body []byte) io.Reader {
+	tf := relayFormatToTranslator(f)
+	if tf == translator.FormatOpenAI {
+		return bytes.NewReader(body)
+	}
+	converted, err := translator.Normalize(body, tf)
+	if err != nil {
+		// Fall back to original body on conversion failure.
+		return bytes.NewReader(body)
+	}
+	return bytes.NewReader(converted)
+}
+
 // ConvertRequest 根据入站格式转换请求体为 OpenAI 格式，然后做 OpenAI 特有后处理。
 func (a *Adaptor) ConvertRequest(ctx context.Context, info *common.RelayInfo, requestBody []byte) (io.Reader, error) {
 	mode := constant.RelayMode(info.RelayMode)
@@ -114,29 +145,7 @@ func (a *Adaptor) ConvertRequest(ctx context.Context, info *common.RelayInfo, re
 		return bytes.NewReader(requestBody), nil
 	}
 
-	var converted io.Reader
-	switch info.InboundFormat {
-	case constant.RelayFormatClaude:
-		r, err := ConvertClaudeToOpenAI(requestBody, info)
-		if err != nil {
-			return nil, err
-		}
-		converted = r
-	case constant.RelayFormatGemini:
-		r, err := ConvertGeminiToOpenAI(requestBody, info)
-		if err != nil {
-			return nil, err
-		}
-		converted = r
-	case constant.RelayFormatOpenAIResponses:
-		r, err := ConvertResponsesToOpenAI(requestBody, info)
-		if err != nil {
-			return nil, err
-		}
-		converted = r
-	default:
-		converted = bytes.NewReader(requestBody)
-	}
+	converted := convertInboundToOpenAI(info.InboundFormat, requestBody)
 	result := replaceModelIfNeeded(converted, info)
 	// stream_options 是 Chat Completions 专属字段，GPT Image 使用 stream/partial_images 原生参数
 	if info.IsStream && mode != constant.RelayModeImagesGenerations && mode != constant.RelayModeImagesEdits {
