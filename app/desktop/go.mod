@@ -8,8 +8,7 @@ require (
 )
 
 replace (
-	ai-platform/cmd/node => ../server/cmd/node
-	ai-platform/pkg/translator => ../server/pkg/translator
-	ai-platform/pkg/provider => ../server/pkg/provider
-	modernc.org/sqlite => modernc.org/sqlite v1.51.0
+	ai-platform/cmd/node => ../../server/cmd/node
+	ai-platform/pkg/translator => ../../server/pkg/translator
+	ai-platform/pkg/provider => ../../server/pkg/provider
 )

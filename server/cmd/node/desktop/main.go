@@ -18,12 +18,10 @@ import (
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 )
 
-//go:embed all:frontend/dist
+//go:embed frontend/dist
 var assets embed.FS
 
-// NodeService is bound to the React frontend.
 type NodeService struct {
-	app     *application.App
 	nodeSrv *server.Server
 	rtr     *router.Router
 	tunnel  *tunnel.Client
@@ -44,16 +42,9 @@ func NewNodeService() *NodeService {
 	return &NodeService{nodeSrv: srv, rtr: r, onlineAt: time.Now()}
 }
 
-func (n *NodeService) setApp(a *application.App) { n.app = a }
-
-// =============================
-// Node Lifecycle
-// =============================
-
 func (n *NodeService) Status() map[string]any {
 	return map[string]any{
-		"running":      true,
-		"port":         20128,
+		"running":      true, "port": 20128,
 		"uptime_sec":   int(time.Since(n.onlineAt).Seconds()),
 		"models_count": len(n.rtr.Models()),
 		"keys_count":   n.countKeys(),
@@ -67,10 +58,6 @@ func (n *NodeService) countKeys() int {
 	keys, _ := keychain.ListKeys()
 	return len(keys)
 }
-
-// =============================
-// Key Management
-// =============================
 
 func (n *NodeService) AddKey(label, keyValue, channelID, baseURL string) map[string]any {
 	e, err := keychain.AddKey(label, keyValue, channelID, baseURL)
@@ -99,10 +86,6 @@ func (n *NodeService) DeleteKey(id string) string {
 	db.DB().Exec("DELETE FROM keys WHERE id = ?", id)
 	return "deleted"
 }
-
-// =============================
-// Model Binding
-// =============================
 
 func (n *NodeService) BindModel(keyID, modelCode, modelName string, shared bool) map[string]any {
 	b, err := keychain.AddBinding(keyID, modelCode, modelName, shared)
@@ -139,10 +122,6 @@ func (n *NodeService) ListBindings() []map[string]any {
 	return out
 }
 
-// =============================
-// Combo
-// =============================
-
 func (n *NodeService) CreateCombo(name string, models []string, strategy string, sticky int) map[string]any {
 	c, err := combo.Create(name, models, strategy, sticky)
 	if err != nil {
@@ -163,14 +142,7 @@ func (n *NodeService) ListCombos() []map[string]any {
 	return out
 }
 
-func (n *NodeService) DeleteCombo(name string) string {
-	combo.Delete(name)
-	return "deleted"
-}
-
-// =============================
-// RTK & Config
-// =============================
+func (n *NodeService) DeleteCombo(name string) string { combo.Delete(name); return "deleted" }
 
 func (n *NodeService) SetRTK(enabled bool, mode string) string {
 	n.rtkCfg = rtk.Config{Enabled: enabled, Mode: mode}
@@ -189,27 +161,21 @@ func (n *NodeService) GetConfig() map[string]any {
 	rtkMode, _ := db.GetConfig("rtk_mode")
 	caveman, _ := db.GetConfig("caveman_enabled")
 	return map[string]any{
-		"rtk_enabled":     rtkEnabled == "true",
-		"rtk_mode":        ifZero(rtkMode, "auto"),
+		"rtk_enabled": rtkEnabled == "true",
+		"rtk_mode":    ifZero(rtkMode, "auto"),
 		"caveman_enabled": caveman == "true",
 	}
 }
 
-// =============================
-// Usage
-// =============================
-
 func (n *NodeService) GetUsageStats() map[string]any {
 	var totalTokens, totalCalls, totalCost int64
 	db.DB().QueryRow("SELECT COALESCE(COUNT(*),0), COALESCE(SUM(tokens),0), COALESCE(SUM(cost_credits),0) FROM usage_log").Scan(&totalCalls, &totalTokens, &totalCost)
-
 	rows, _ := db.DB().Query("SELECT model, COUNT(*), SUM(tokens), SUM(cost_credits) FROM usage_log GROUP BY model ORDER BY COUNT(*) DESC LIMIT 10")
 	var byModel []map[string]any
 	if rows != nil {
 		defer rows.Close()
 		for rows.Next() {
-			var model string
-			var calls, tokens, cost int64
+			var model string; var calls, tokens, cost int64
 			rows.Scan(&model, &calls, &tokens, &cost)
 			byModel = append(byModel, map[string]any{"model": model, "calls": calls, "tokens": tokens, "cost": cost})
 		}
@@ -218,59 +184,32 @@ func (n *NodeService) GetUsageStats() map[string]any {
 }
 
 func (n *NodeService) GetUsageLogs(limit int) []map[string]any {
-	if limit <= 0 || limit > 500 {
-		limit = 50
-	}
-	rows, err := db.DB().Query("SELECT request_id, model, provider, tokens, input_tokens, output_tokens, cost_credits, latency_ms, success, created_at FROM usage_log ORDER BY id DESC LIMIT ?", limit)
-	if err != nil {
-		return []map[string]any{}
-	}
+	if limit <= 0 || limit > 500 { limit = 50 }
+	rows, _ := db.DB().Query("SELECT request_id, model, provider, tokens, input_tokens, output_tokens, cost_credits, latency_ms, success, created_at FROM usage_log ORDER BY id DESC LIMIT ?", limit)
+	if rows == nil { return []map[string]any{} }
 	defer rows.Close()
 	var out []map[string]any
 	for rows.Next() {
-		var rid, model, provider string
-		var tokens, inT, outT, cost, lat int64
-		var success int
-		var created int64
+		var rid, model, provider string; var tokens, inT, outT, cost, lat int64; var success int; var created int64
 		rows.Scan(&rid, &model, &provider, &tokens, &inT, &outT, &cost, &lat, &success, &created)
 		out = append(out, map[string]any{
-			"request_id": rid, "model": model, "provider": provider,
-			"tokens": tokens, "input_tokens": inT, "output_tokens": outT,
-			"cost": cost, "latency_ms": lat, "success": success == 1, "created_at": created,
+			"request_id": rid, "model": model, "provider": provider, "tokens": tokens,
+			"input_tokens": inT, "output_tokens": outT, "cost": cost, "latency_ms": lat,
+			"success": success == 1, "created_at": created,
 		})
 	}
 	return out
 }
 
-func boolStr(b bool) string {
-	if b {
-		return "true"
-	}
-	return "false"
-}
-
-func ifZero(s, fallback string) string {
-	if s == "" {
-		return fallback
-	}
-	return s
-}
+func boolStr(b bool) string { if b { return "true" }; return "false" }
+func ifZero(s, fallback string) string { if s == "" { return fallback }; return s }
 
 func main() {
 	node := NewNodeService()
-
 	err := wails.Run(&options.App{
-		Title:     "Token Flux Node",
-		Width:     1200,
-		Height:    800,
-		MinWidth:  900,
-		MinHeight: 600,
-		AssetServer: &assetserver.Options{
-			Assets: assets,
-		},
+		Title: "Token Flux Node", Width: 1200, Height: 800, MinWidth: 900, MinHeight: 600,
+		AssetServer: &assetserver.Options{Assets: assets},
 		Bind: []any{node},
 	})
-	if err != nil {
-		log.Fatal(err)
-	}
+	if err != nil { log.Fatal(err) }
 }
