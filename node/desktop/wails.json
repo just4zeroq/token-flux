@@ -1,0 +1,12 @@
+{
+  "name": "Token Flux Node",
+  "outputfilename": "token-flux-node.exe",
+  "frontend:install": "cd frontend && npm install",
+  "frontend:build": "cd frontend && npm run build",
+  "frontend:dev:watcher": "cd frontend && npm run dev",
+  "frontend:dev:serverUrl": "http://localhost:5173",
+  "author": {
+    "name": "Token Flux",
+    "email": ""
+  }
+}

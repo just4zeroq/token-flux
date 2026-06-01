@@ -1,0 +1,5 @@
+frontend:
+  build: cd frontend && npm run build
+  install: cd frontend && npm install
+  dev: cd frontend && npm run dev
+  serve: http://localhost:5173
