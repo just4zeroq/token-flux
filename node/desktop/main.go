@@ -5,13 +5,13 @@ import (
 	"log"
 	"time"
 
-	"ai-platform-node/internal/combo"
-	"ai-platform-node/internal/db"
-	"ai-platform-node/internal/keychain"
-	"ai-platform-node/internal/router"
-	"ai-platform-node/internal/rtk"
-	"ai-platform-node/internal/server"
-	"ai-platform-node/internal/tunnel"
+	"ai-platform-node/pkg/combo"
+	"ai-platform-node/pkg/db"
+	"ai-platform-node/pkg/keychain"
+	"ai-platform-node/pkg/router"
+	"ai-platform-node/pkg/rtk"
+	"ai-platform-node/pkg/server"
+	"ai-platform-node/pkg/tunnel"
 
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
@@ -50,9 +50,8 @@ func (n *NodeService) Status() map[string]any {
 		"online":       n.tunnel != nil,
 	}
 }
-
-func (n *NodeService) Stop() string           { n.nodeSrv.Stop(); return "stopped" }
-func (n *NodeService) countKeys() int          { keys, _ := keychain.ListKeys(); return len(keys) }
+func (n *NodeService) Stop() string { n.nodeSrv.Stop(); return "stopped" }
+func (n *NodeService) countKeys() int { keys, _ := keychain.ListKeys(); return len(keys) }
 func (n *NodeService) AddKey(label, keyValue, channelID, baseURL string) map[string]any {
 	e, err := keychain.AddKey(label, keyValue, channelID, baseURL)
 	if err != nil { return map[string]any{"error": err.Error()} }
@@ -62,9 +61,7 @@ func (n *NodeService) ListKeys() []map[string]any {
 	keys, _ := keychain.ListKeys()
 	if keys == nil { return []map[string]any{} }
 	out := make([]map[string]any, len(keys))
-	for i, k := range keys {
-		out[i] = map[string]any{"id": k.ID, "label": k.Label, "channel_id": k.ChannelID, "base_url": k.BaseURL, "status": k.Status}
-	}
+	for i, k := range keys { out[i] = map[string]any{"id": k.ID, "label": k.Label, "channel_id": k.ChannelID, "base_url": k.BaseURL, "status": k.Status} }
 	return out
 }
 func (n *NodeService) DeleteKey(id string) string { db.DB().Exec("DELETE FROM keys WHERE id = ?", id); return "deleted" }

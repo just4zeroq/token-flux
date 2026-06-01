@@ -11,10 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"ai-platform-node/internal/db"
-	"ai-platform-node/internal/keychain"
-	"ai-platform-node/internal/router"
-	"ai-platform-node/internal/types"
+	"ai-platform-node/pkg/db"
+	"ai-platform-node/pkg/keychain"
+	"ai-platform-node/pkg/router"
+	"ai-platform-node/pkg/types"
 
 	"github.com/gorilla/websocket"
 )

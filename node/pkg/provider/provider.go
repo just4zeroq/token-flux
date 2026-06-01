@@ -8,8 +8,8 @@ import (
 	"io"
 	"strings"
 
-	"ai-platform-node/internal/keychain"
-	"ai-platform-node/internal/types"
+	"ai-platform-node/pkg/keychain"
+	"ai-platform-node/pkg/types"
 	pkgprovider "ai-platform/pkg/provider"
 	"ai-platform/pkg/translator"
 )

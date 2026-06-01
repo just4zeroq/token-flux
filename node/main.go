@@ -9,11 +9,11 @@ import (
 	"os/signal"
 	"syscall"
 
-	"ai-platform-node/internal/db"
-	"ai-platform-node/internal/keychain"
-	"ai-platform-node/internal/router"
-	"ai-platform-node/internal/server"
-	"ai-platform-node/internal/tunnel"
+	"ai-platform-node/pkg/db"
+	"ai-platform-node/pkg/keychain"
+	"ai-platform-node/pkg/router"
+	"ai-platform-node/pkg/server"
+	"ai-platform-node/pkg/tunnel"
 )
 
 func main() {
