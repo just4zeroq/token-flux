@@ -59,6 +59,17 @@ type NoKeyError struct{ Model string }
 
 func (e *NoKeyError) Error() string { return "no key registered for model " + e.Model }
 
+// Models returns the list of registered model codes.
+func (r *Router) Models() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := make([]string, 0, len(r.keys))
+	for code := range r.keys {
+		out = append(out, code)
+	}
+	return out
+}
+
 // Route handles a request by picking a key and dispatching to the provider.
 func (r *Router) Route(ctx context.Context, env *types.RequestEnvelope) (*types.ChatResponse, error) {
 	kh, err := r.Pick(env.Model)

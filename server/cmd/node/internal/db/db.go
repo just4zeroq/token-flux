@@ -35,13 +35,24 @@ CREATE TABLE IF NOT EXISTS bindings (
 );
 
 CREATE TABLE IF NOT EXISTS usage_log (
-    id          INTEGER PRIMARY KEY AUTOINCREMENT,
-    request_id  TEXT NOT NULL,
-    model       TEXT NOT NULL,
-    tokens      INTEGER NOT NULL DEFAULT 0,
+    id           INTEGER PRIMARY KEY AUTOINCREMENT,
+    request_id   TEXT NOT NULL,
+    model        TEXT NOT NULL,
+    provider     TEXT NOT NULL DEFAULT '',
+    tokens       INTEGER NOT NULL DEFAULT 0,
+    input_tokens INTEGER NOT NULL DEFAULT 0,
+    output_tokens INTEGER NOT NULL DEFAULT 0,
     cost_credits INTEGER NOT NULL DEFAULT 0,
-    latency_ms  INTEGER NOT NULL DEFAULT 0,
-    success     INTEGER NOT NULL DEFAULT 1,
+    latency_ms   INTEGER NOT NULL DEFAULT 0,
+    success      INTEGER NOT NULL DEFAULT 1,
+    created_at   INTEGER NOT NULL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS combos (
+    name        TEXT PRIMARY KEY,
+    models      TEXT NOT NULL DEFAULT '[]',
+    strategy    TEXT NOT NULL DEFAULT 'fallback',
+    sticky      INTEGER NOT NULL DEFAULT 1,
     created_at  INTEGER NOT NULL DEFAULT 0
 );
 `
