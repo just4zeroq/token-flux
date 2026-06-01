@@ -118,6 +118,9 @@ func Handle(req *RelayRequest) (resp *RelayResponse, err error) {
 	// 2. Detect inbound request format from body content + path.
 	inboundFormat := detectInboundFormat(req.RawBody, req.Path)
 
+	// 2b. Client may request a different output format (e.g. OpenAI-in, Claude-out).
+	outputFormat := extractOutputFormat(req.RawBody)
+
 	// 3. Balance check.
 	if err := checkBalance(ctx, req.RC.UserID); err != nil {
 		return nil, err
@@ -191,7 +194,7 @@ func Handle(req *RelayRequest) (resp *RelayResponse, err error) {
 		StartTime:        time.Now(),
 		StreamStatus:     common.NewStreamStatus(),
 		InboundFormat:    inboundFormat,
-		ClientFormat:     inboundFormat,
+		ClientFormat:     outputFormat.Or(inboundFormat),
 		ChannelMeta: &common.ChannelMeta{
 			ChannelID:         picked.ChannelID,
 			ChannelName:       picked.ChannelName,
@@ -323,6 +326,7 @@ func HandleStream(w http.ResponseWriter, req *RelayRequest) (err error) {
 
 	// 2. Detect inbound request format.
 	inboundFormat := detectInboundFormat(req.RawBody, req.Path)
+	outputFormat := extractOutputFormat(req.RawBody)
 
 	// 3. Balance check.
 	if e := checkBalance(ctx, req.RC.UserID); e != nil {
@@ -397,7 +401,7 @@ func HandleStream(w http.ResponseWriter, req *RelayRequest) (err error) {
 		StartTime:        time.Now(),
 		StreamStatus:     common.NewStreamStatus(),
 		InboundFormat:    inboundFormat,
-		ClientFormat:     inboundFormat,
+		ClientFormat:     outputFormat.Or(inboundFormat),
 		ChannelMeta: &common.ChannelMeta{
 			ChannelID:         picked.ChannelID,
 			ChannelName:       picked.ChannelName,
@@ -518,6 +522,47 @@ func extractModel(body []byte) (string, error) {
 		}
 	}
 	return "", gerror.New("model is required in request body")
+}
+
+// outputFormatValue wraps a RelayFormat so it can express "no value set".
+type outputFormatValue struct{ v constant.RelayFormat }
+
+// Or returns v if set, otherwise fallback.
+func (of outputFormatValue) Or(fallback constant.RelayFormat) constant.RelayFormat {
+	if of.v != "" {
+		return of.v
+	}
+	return fallback
+}
+
+// extractOutputFormat reads the "output_format" field from the request body.
+// Supported values: "openai", "claude", "gemini", "responses".
+// Returns empty format if the field is missing or invalid.
+func extractOutputFormat(body []byte) outputFormatValue {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return outputFormatValue{}
+	}
+	v, ok := raw["output_format"]
+	if !ok {
+		return outputFormatValue{}
+	}
+	var s string
+	if err := json.Unmarshal(v, &s); err != nil {
+		return outputFormatValue{}
+	}
+	switch strings.ToLower(s) {
+	case "openai":
+		return outputFormatValue{constant.RelayFormatOpenAI}
+	case "claude":
+		return outputFormatValue{constant.RelayFormatClaude}
+	case "gemini":
+		return outputFormatValue{constant.RelayFormatGemini}
+	case "responses":
+		return outputFormatValue{constant.RelayFormatResponses}
+	default:
+		return outputFormatValue{}
+	}
 }
 
 func checkBalance(ctx context.Context, userID int64) error {
