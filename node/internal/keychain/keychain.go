@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"ai-platform/cmd/node/internal/db"
-	"ai-platform/cmd/node/internal/types"
+	"ai-platform-node/internal/db"
+	"ai-platform-node/internal/types"
 
 	"github.com/google/uuid"
 )

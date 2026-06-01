@@ -6,9 +6,9 @@ import (
 	"log"
 	"net/http"
 
-	"ai-platform/cmd/node/internal/keychain"
-	"ai-platform/cmd/node/internal/router"
-	"ai-platform/cmd/node/internal/types"
+	"ai-platform-node/internal/keychain"
+	"ai-platform-node/internal/router"
+	"ai-platform-node/internal/types"
 )
 
 type Server struct {

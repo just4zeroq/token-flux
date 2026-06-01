@@ -6,7 +6,7 @@ import (
 	"sync"
 	"time"
 
-	"ai-platform/cmd/node/internal/db"
+	"ai-platform-node/internal/db"
 )
 
 // ComboConfig defines a named list of models with routing strategy.

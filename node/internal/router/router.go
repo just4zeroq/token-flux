@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync"
 
-	"ai-platform/cmd/node/internal/provider"
-	"ai-platform/cmd/node/internal/types"
+	"ai-platform-node/internal/provider"
+	"ai-platform-node/internal/types"
 )
 
 type Router struct {

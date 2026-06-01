@@ -1,5 +1,3 @@
-// Package rtk implements the Reduced Token Kit — compresses tool_result content
-// before sending to LLM providers, saving 20-40% of input tokens.
 package rtk
 
 import (
@@ -10,28 +8,24 @@ import (
 	"strings"
 )
 
-// Config for RTK compression.
 type Config struct {
 	Enabled bool   `json:"enabled"`
-	Mode    string `json:"mode"` // "compress" | "summary" | "auto"
+	Mode    string `json:"mode"`
 }
 
-// CompressMessages applies RTK compression to tool results in a request body.
+// CompressMessages compresses tool_result content in request bodies.
 func CompressMessages(body []byte, cfg Config) []byte {
 	if !cfg.Enabled {
 		return body
 	}
-
 	var req map[string]any
 	if err := json.Unmarshal(body, &req); err != nil {
 		return body
 	}
-
 	messages, ok := req["messages"].([]any)
 	if !ok {
 		return body
 	}
-
 	changed := false
 	for i, msg := range messages {
 		m, ok := msg.(map[string]any)
@@ -53,7 +47,6 @@ func CompressMessages(body []byte, cfg Config) []byte {
 			changed = true
 		}
 	}
-
 	if !changed {
 		return body
 	}
@@ -71,8 +64,6 @@ func compressContent(s string, mode string) string {
 		return applyCompression(s)
 	case "summary":
 		return applySummary(s)
-	case "auto":
-		fallthrough
 	default:
 		if isDiffContent(s) || isDirectoryListing(s) {
 			return applyCompression(s)
@@ -82,19 +73,14 @@ func compressContent(s string, mode string) string {
 }
 
 var (
-	diffHeader = regexp.MustCompile(`(?m)^diff --git a/`)
-	hunkHeader = regexp.MustCompile(`(?m)^@@ -\d+,\d+ \+\d+,\d+ @@`)
-	lsEntry    = regexp.MustCompile(`(?m)^[drwx-]{10}\s+\d+\s+\S+\s+\S+`)
-	treeLine   = regexp.MustCompile(`(?m)^│?\s*├── |^│?\s*└── |^── `)
+	diffHdr = regexp.MustCompile(`(?m)^diff --git a/`)
+	hunkHdr = regexp.MustCompile(`(?m)^@@ -\d+,\d+ \+\d+,\d+ @@`)
+	lsEntry = regexp.MustCompile(`(?m)^[drwx-]{10}\s+\d+\s+\S+\s+\S+`)
+	treeEnt = regexp.MustCompile(`(?m)^[|+\\]\s`) // tree/list indicators
 )
 
-func isDiffContent(s string) bool {
-	return diffHeader.MatchString(s) || hunkHeader.MatchString(s)
-}
-
-func isDirectoryListing(s string) bool {
-	return lsEntry.MatchString(s) || treeLine.MatchString(s)
-}
+func isDiffContent(s string) bool  { return diffHdr.MatchString(s) || hunkHdr.MatchString(s) }
+func isDirectoryListing(s string) bool { return lsEntry.MatchString(s) || treeEnt.MatchString(s) }
 
 func applyCompression(s string) string {
 	lines := strings.Split(s, "\n")
