@@ -221,23 +221,10 @@ func (a *Adaptor) DoResponse(ctx context.Context, resp *http.Response, info *com
 	g.Log().Infof(ctx, "[OpenAI.Adaptor.DoResponse] Entry: clientFormat=%s, relayMode=%d, isStream=%v, statusCode=%d",
 		clientFormat, info.RelayMode, info.IsStream, resp.StatusCode)
 
-	// 根据客户端格式转换响应
+	// 根据客户端格式转换响应（非 OpenAI 格式走 shared translator）
 	switch clientFormat {
-	case constant.RelayFormatClaude:
-		if info.IsStream {
-			return handleClaudeInboundStream(ctx, resp, info, writer)
-		}
-		return handleClaudeInboundNonStream(ctx, resp, info, writer)
-	case constant.RelayFormatGemini:
-		if info.IsStream {
-			return handleGeminiInboundStream(ctx, resp, info, writer)
-		}
-		return handleGeminiInboundNonStream(ctx, resp, info, writer)
-	case constant.RelayFormatOpenAIResponses:
-		if info.IsStream {
-			return a.handleResponsesInboundStream(ctx, resp, info, writer)
-		}
-		return a.handleResponsesInboundNonStream(ctx, resp, info, writer)
+	case constant.RelayFormatClaude, constant.RelayFormatGemini, constant.RelayFormatOpenAIResponses:
+		return a.handleTranslatedResponse(ctx, resp, info, writer)
 	}
 
 	// Chat Completions via Responses API 桥接
