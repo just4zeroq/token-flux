@@ -37,22 +37,52 @@ func (r *Router) Unregister(modelCode, keyHash string) {
 	}
 }
 
-// Pick returns the first key_hash for a model (round-robin can be added later).
+// Pick returns one key_hash using round-robin.
 func (r *Router) Pick(modelCode string) (string, error) {
 	r.mu.RLock()
-	defer r.mu.RUnlock()
 	list := r.keys[modelCode]
+	r.mu.RUnlock()
 	if len(list) == 0 {
 		return "", &NoKeyError{Model: modelCode}
 	}
-	// Simple round-robin: move first to end
-	first := list[0]
-	r.mu.RUnlock()
 	r.mu.Lock()
+	first := list[0]
 	r.keys[modelCode] = append(list[1:], first)
 	r.mu.Unlock()
-	r.mu.RLock()
 	return first, nil
+}
+
+// PickAll returns all key hashes for a model, ordered by registration.
+func (r *Router) PickAll(modelCode string) ([]string, error) {
+	r.mu.RLock()
+	list := r.keys[modelCode]
+	r.mu.RUnlock()
+	if len(list) == 0 {
+		return nil, &NoKeyError{Model: modelCode}
+	}
+	out := make([]string, len(list))
+	copy(out, list)
+	return out, nil
+}
+
+// MarkFailed moves a failed key hash to the end of the list for fallback.
+func (r *Router) MarkFailed(modelCode, keyHash string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	list := r.keys[modelCode]
+	for i, h := range list {
+		if h == keyHash {
+			r.keys[modelCode] = append(append(list[:i], list[i+1:]...), h)
+			return
+		}
+	}
+}
+
+// KeyCount returns the number of key hashes registered for a model.
+func (r *Router) KeyCount(modelCode string) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return len(r.keys[modelCode])
 }
 
 type NoKeyError struct{ Model string }

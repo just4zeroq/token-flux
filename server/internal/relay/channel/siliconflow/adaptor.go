@@ -11,8 +11,9 @@ import (
 
 	"ai-platform/internal/relay/channel/openai"
 	"ai-platform/internal/relay/common"
-	"ai-platform/internal/relay/constant"
 	"ai-platform/internal/relay/override"
+	"ai-platform/internal/relay/constant"
+	"ai-platform/pkg/translator"
 )
 
 // Adaptor SiliconFlow 供应商适配器
@@ -60,7 +61,7 @@ func (a *Adaptor) SetupRequestHeader(header http.Header, info *common.RelayInfo)
 // 其他请求只做模型名替换
 func (a *Adaptor) ConvertRequest(ctx context.Context, info *common.RelayInfo, requestBody []byte) (io.Reader, error) {
 	// 非 OpenAI 格式先转换为 OpenAI
-	if info.InboundFormat != "" && info.InboundFormat != constant.RelayFormatOpenAI {
+	if info.InboundFormat != "" && info.InboundFormat != translator.FormatOpenAI {
 		c, err := openai.ConvertToOpenAI(requestBody, info)
 		if err != nil {
 			return nil, err

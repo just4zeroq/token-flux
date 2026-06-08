@@ -16,6 +16,7 @@ import (
 	"ai-platform/internal/relay/constant"
 	"ai-platform/internal/relay/dto"
 	"ai-platform/internal/relay/helper"
+	"ai-platform/pkg/translator"
 )
 
 // ConvertToOpenAI 根据入站格式将请求转换为 OpenAI 格式。
@@ -23,19 +24,19 @@ import (
 // 其他供应商适配器可调用此函数统一处理入站格式预转换。
 func ConvertToOpenAI(requestBody []byte, info *common.RelayInfo) ([]byte, error) {
 	switch info.InboundFormat {
-	case constant.RelayFormatClaude:
+	case translator.FormatClaude:
 		r, err := ConvertClaudeToOpenAI(requestBody, info)
 		if err != nil {
 			return nil, err
 		}
 		return io.ReadAll(r)
-	case constant.RelayFormatGemini:
+	case translator.FormatGemini:
 		r, err := ConvertGeminiToOpenAI(requestBody, info)
 		if err != nil {
 			return nil, err
 		}
 		return io.ReadAll(r)
-	case constant.RelayFormatOpenAIResponses:
+	case translator.FormatOpenAIResponses:
 		r, err := ConvertResponsesToOpenAI(requestBody, info)
 		if err != nil {
 			return nil, err

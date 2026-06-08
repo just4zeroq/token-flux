@@ -12,8 +12,9 @@ import (
 	"ai-platform/internal/relay/channel/claude"
 	"ai-platform/internal/relay/channel/openai"
 	"ai-platform/internal/relay/common"
-	"ai-platform/internal/relay/constant"
 	"ai-platform/internal/relay/override"
+	"ai-platform/internal/relay/constant"
+	"ai-platform/pkg/translator"
 )
 
 // Adaptor MiniMax 供应商适配器
@@ -58,12 +59,12 @@ func (a *Adaptor) ConvertRequest(ctx context.Context, info *common.RelayInfo, re
 	}
 
 	// Claude 入站：仅做模型映射
-	if info.InboundFormat == constant.RelayFormatClaude {
+	if info.InboundFormat == translator.FormatClaude {
 		return convertClaudeRequest(requestBody, info)
 	}
 
 	// 非 OpenAI 格式先转换为 OpenAI
-	if info.InboundFormat != "" && info.InboundFormat != constant.RelayFormatOpenAI {
+	if info.InboundFormat != "" && info.InboundFormat != translator.FormatOpenAI {
 		converted, err := openai.ConvertToOpenAI(requestBody, info)
 		if err != nil {
 			return nil, err
@@ -122,7 +123,7 @@ func (a *Adaptor) DoResponse(ctx context.Context, resp *http.Response, info *com
 		return handleImageResponse(resp, info, writer)
 	}
 
-	if info.GetOriginalClientFormat() == constant.RelayFormatClaude {
+	if info.GetOriginalClientFormat() == translator.FormatClaude {
 		delegate := &claude.Adaptor{}
 		delegate.Init(info)
 		return delegate.DoResponse(ctx, resp, info, writer)

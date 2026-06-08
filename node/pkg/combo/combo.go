@@ -33,7 +33,7 @@ var (
 
 // List returns all combos from SQLite.
 func List() ([]ComboConfig, error) {
-	rows, err := db.DB().Query("SELECT name, models, strategy, sticky, created_at FROM combos ORDER BY created_at DESC")
+	rows, err := db.DB().Query("SELECT name, models, strategy, sticky, created_at FROM node_combos ORDER BY created_at DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -67,7 +67,7 @@ func Create(name string, models []string, strategy string, sticky int) (*ComboCo
 	now := time.Now().Unix()
 
 	_, err := db.DB().Exec(
-		"INSERT OR REPLACE INTO combos(name, models, strategy, sticky, created_at) VALUES (?, ?, ?, ?, ?)",
+		"INSERT OR REPLACE INTO node_combos(name, models, strategy, sticky, created_at) VALUES (?, ?, ?, ?, ?)",
 		name, string(modelsJSON), strategy, sticky, now)
 	if err != nil {
 		return nil, err
@@ -82,7 +82,7 @@ func Create(name string, models []string, strategy string, sticky int) (*ComboCo
 
 // Delete removes a combo.
 func Delete(name string) error {
-	_, err := db.DB().Exec("DELETE FROM combos WHERE name = ?", name)
+	_, err := db.DB().Exec("DELETE FROM node_combos WHERE name = ?", name)
 	statesMu.Lock()
 	delete(states, name)
 	statesMu.Unlock()
@@ -109,7 +109,7 @@ func Resolve(name string) (string, error) {
 
 	// Load combo config
 	var modelsJSON string
-	err := db.DB().QueryRow("SELECT models FROM combos WHERE name = ?", name).Scan(&modelsJSON)
+	err := db.DB().QueryRow("SELECT models FROM node_combos WHERE name = ?", name).Scan(&modelsJSON)
 	if err != nil {
 		return "", fmt.Errorf("combo %q not found", name)
 	}
@@ -122,7 +122,7 @@ func Resolve(name string) (string, error) {
 	// Get strategy
 	var strategy string
 	var sticky int
-	db.DB().QueryRow("SELECT strategy, sticky FROM combos WHERE name = ?", name).Scan(&strategy, &sticky)
+	db.DB().QueryRow("SELECT strategy, sticky FROM node_combos WHERE name = ?", name).Scan(&strategy, &sticky)
 
 	switch strategy {
 	case "round-robin":
@@ -157,7 +157,7 @@ func MarkFailed(name string) (nextModel string, hasMore bool, err error) {
 	defer s.mu.Unlock()
 
 	var modelsJSON string
-	db.DB().QueryRow("SELECT models FROM combos WHERE name = ?", name).Scan(&modelsJSON)
+	db.DB().QueryRow("SELECT models FROM node_combos WHERE name = ?", name).Scan(&modelsJSON)
 	var models []string
 	json.Unmarshal([]byte(modelsJSON), &models)
 

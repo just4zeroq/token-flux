@@ -532,3 +532,76 @@ func ListModels(r *ghttp.Request) {
 		},
 	})
 }
+
+// channelRow for public channel listing.
+type channelRow struct {
+	ID          int64     `json:"id"`
+	Code        string    `json:"code"`
+	Name        string    `json:"name"`
+	Description string    `json:"description"`
+	Status      string    `json:"status"`
+	CreatedAt   time.Time `json:"created_at"`
+}
+
+// ListChannels returns active admin channels for the public catalog.
+// GET /api/v1/catalog/channels
+func ListChannels(r *ghttp.Request) {
+	var rows []channelRow
+	err := g.DB().Model("llm_channels").Ctx(r.Context()).
+		Where("source_type", "admin").
+		Where("status", "active").
+		Order("id ASC").
+		Scan(&rows)
+	if err != nil {
+		r.Response.WriteJson(map[string]any{
+			"code":    -1,
+			"message": err.Error(),
+		})
+		return
+	}
+	if rows == nil {
+		rows = []channelRow{}
+	}
+	r.Response.WriteJson(map[string]any{
+		"code":    0,
+		"message": "ok",
+		"data": map[string]any{
+			"list": rows,
+		},
+	})
+}
+// channelModelBindingRow for public channel-models listing.
+type channelModelBindingRow struct {
+	ChannelID   int64  `json:"channel_id"`
+	ChannelName string `json:"channel_name"`
+	ModelSpecID int64  `json:"model_spec_id"`
+	ModelCode   string `json:"model_code"`
+	ModelName   string `json:"model_name"`
+	DeveloperName string `json:"developer_name"`
+}
+
+// ListChannelModels returns all active admin channels with their bound models.
+// GET /api/v1/catalog/channel-models
+func ListChannelModels(r *ghttp.Request) {
+	var rows []channelModelBindingRow
+	err := g.DB().Model("llm_channel_models", "cm").Ctx(r.Context()).
+		InnerJoin("llm_channels", "c", "c.id = cm.channel_id").
+		InnerJoin("llm_model_specs", "ms", "ms.id = cm.model_spec_id").
+		Where("c.source_type", "admin").
+		Where("c.status", "active").
+		Fields("cm.channel_id, c.name AS channel_name, cm.model_spec_id, ms.model_code, ms.model_name, ms.developer_name").
+		Order("cm.channel_id ASC, cm.model_spec_id ASC").
+		Scan(&rows)
+	if err != nil {
+		r.Response.WriteJson(map[string]interface{}{"code": -1, "message": err.Error()})
+		return
+	}
+	if rows == nil {
+		rows = []channelModelBindingRow{}
+	}
+	r.Response.WriteJson(map[string]interface{}{
+		"code": 0, "message": "ok",
+		"data": map[string]interface{}{"list": rows},
+	})
+}
+

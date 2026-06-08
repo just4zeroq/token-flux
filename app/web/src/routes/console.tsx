@@ -107,8 +107,6 @@ function ConsolePage() {
             {activeTab === 'usage' && <UsageTab />}
             {activeTab === 'recharge' && <RechargeTab />}
             {activeTab === 'provider' && <ProviderTab onTabChange={handleTabChange} />}
-            {activeTab === 'channels' && <ChannelsTab />}
-            {activeTab === 'provider-models' && <ProviderModelsTab />}
             {activeTab === 'provider-keys' && <ProviderKeysTab />}
             {activeTab === 'settings' && <SettingsTab />}
           </div>
@@ -166,7 +164,7 @@ function OverviewTab() {
       setPoints(p)
       setStats(st)
       setKeysCount(Array.isArray(keys) ? keys.length : 0)
-      setRecent(rec)
+      setRecent(Array.isArray(rec) ? rec : [])
       setModelCount(modelsRes?.list?.length ?? 0)
       setProviderRevenue(rev)
       setModelUsageRank(ranking?.list ?? [])
@@ -711,8 +709,6 @@ function ProviderTab({ onTabChange }: { onTabChange: (t: string) => void }) {
 
       <div className="grid gap-4 md:grid-cols-3">
         {[
-          { key: 'channels', label: 'Channels', desc: 'Configure API protocol settings', icon: '⇆' },
-          { key: 'provider-models', label: 'Models', desc: 'Manage your published models', icon: '▤' },
           { key: 'provider-keys', label: 'Model Keys', desc: 'Upstream API key management', icon: '⚷' },
         ].map((item) => (
           <button key={item.key} onClick={() => onTabChange(item.key)}

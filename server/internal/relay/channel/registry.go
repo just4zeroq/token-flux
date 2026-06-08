@@ -5,6 +5,7 @@ import (
 	"ai-platform/internal/relay/channel/ali"
 	"ai-platform/internal/relay/channel/aws"
 	"ai-platform/internal/relay/channel/baidu_v2"
+	"ai-platform/internal/relay/channel/bridge"
 	"ai-platform/internal/relay/channel/claude"
 	"ai-platform/internal/relay/channel/cloudflare"
 	"ai-platform/internal/relay/channel/codex"
@@ -16,6 +17,7 @@ import (
 	"ai-platform/internal/relay/channel/minimax"
 	"ai-platform/internal/relay/channel/mistral"
 	"ai-platform/internal/relay/channel/moonshot"
+	"ai-platform/internal/relay/channel/node"
 	"ai-platform/internal/relay/channel/ollama"
 	"ai-platform/internal/relay/channel/openai"
 	"ai-platform/internal/relay/channel/siliconflow"
@@ -28,6 +30,7 @@ import (
 	"ai-platform/internal/relay/channel/zhipu"
 	"ai-platform/internal/relay/common"
 	"ai-platform/internal/relay/constant"
+	pkgexecutor "ai-platform/pkg/executor"
 )
 
 // GetAdaptor returns the appropriate Adaptor for the given protocol or provider type.
@@ -44,18 +47,46 @@ func GetAdaptor(providerType any) common.Adaptor {
 	return nil
 }
 
+// providerBridgeName maps server constant.ProviderType to executor registration name.
+func providerBridgeName(pt constant.ProviderType) string {
+	switch pt {
+	case constant.ProviderOpenAI:
+		return "openai"
+	case constant.ProviderClaude:
+		return "claude"
+	case constant.ProviderDeepSeek:
+		return "deepseek"
+	case constant.ProviderGemini:
+	return "gemini"
+	case constant.ProviderVolcengine:
+		return "volcengine"
+	default:
+		return ""
+	}
+}
+
 func getByProviderType(pt int) common.Adaptor {
 	switch constant.ProviderType(pt) {
-	case constant.ProviderOpenAI:
-		return &openai.Adaptor{}
+	// === Migrated to pkg/executor via bridge ===
+	case constant.ProviderOpenAI,
+		constant.ProviderAzure,
+		constant.ProviderAI360,
+		constant.ProviderLingyi,
+		constant.ProviderOpenRouter,
+		constant.ProviderXInference:
+		return bridge.New(pkgexecutor.GetByProvider(providerBridgeName(constant.ProviderOpenAI)))
 	case constant.ProviderClaude:
-		return &claude.Adaptor{}
+		return bridge.New(pkgexecutor.GetByProvider(providerBridgeName(constant.ProviderClaude)))
 	case constant.ProviderGemini:
-		return &gemini.Adaptor{}
+		return bridge.New(pkgexecutor.GetByProvider(providerBridgeName(constant.ProviderGemini)))
+	case constant.ProviderDeepSeek:
+		return bridge.New(pkgexecutor.GetByProvider(providerBridgeName(constant.ProviderDeepSeek)))
+	case constant.ProviderVolcengine:
+		return bridge.New(pkgexecutor.GetByProvider(providerBridgeName(constant.ProviderVolcengine)))
+
+	// === Yet to migrate (still using old adaptors) ===
 	case constant.ProviderAli:
 		return &ali.Adaptor{}
-	case constant.ProviderDeepSeek:
-		return &deepseek.Adaptor{}
 	case constant.ProviderZhipu:
 		return &zhipu.Adaptor{}
 	case constant.ProviderMoonshot:
@@ -72,8 +103,6 @@ func getByProviderType(pt int) common.Adaptor {
 		return &submodel.Adaptor{}
 	case constant.ProviderBaiduV2:
 		return &baidu_v2.Adaptor{}
-	case constant.ProviderVolcengine:
-		return &volcengine.Adaptor{}
 	case constant.ProviderMiniMax:
 		return &minimax.Adaptor{}
 	case constant.ProviderOllama:
@@ -94,14 +123,6 @@ func getByProviderType(pt int) common.Adaptor {
 		return &codex.Adaptor{}
 	case constant.ProviderAWS:
 		return &aws.Adaptor{}
-	case constant.ProviderAzure:
-		return &openai.Adaptor{} // Azure OpenAI is OpenAI-compatible
-	// OpenAI-compatible pass-through
-	case constant.ProviderAI360,
-		constant.ProviderLingyi,
-		constant.ProviderOpenRouter,
-		constant.ProviderXInference:
-		return &openai.Adaptor{}
 	default:
 		return nil
 	}
@@ -147,6 +168,8 @@ func getByProtocol(protocol string) common.Adaptor {
 		return &vertex.Adaptor{}
 	case "aws", "bedrock":
 		return &aws.Adaptor{}
+	case "node":
+		return &node.Adaptor{}
 	default:
 		return nil
 	}

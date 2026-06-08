@@ -12,8 +12,10 @@ import (
 	"ai-platform/internal/relay/channel/claude"
 	"ai-platform/internal/relay/channel/openai"
 	"ai-platform/internal/relay/common"
-	"ai-platform/internal/relay/constant"
+	
 	"ai-platform/internal/relay/override"
+	"ai-platform/internal/relay/constant"
+	"ai-platform/pkg/translator"
 )
 
 // Adaptor 阿里云 DashScope 供应商适配器
@@ -64,12 +66,12 @@ func (a *Adaptor) SetupRequestHeader(header http.Header, info *common.RelayInfo)
 // Claude 入站直接透传到 Anthropic 兼容端点，其他格式先转为 OpenAI 再做 DashScope 特有适配。
 func (a *Adaptor) ConvertRequest(ctx context.Context, info *common.RelayInfo, requestBody []byte) (io.Reader, error) {
 	// Claude 入站：仅做模型映射，不做 DashScope top_p 裁剪（Claude 格式请求体不含 top_p）
-	if info.InboundFormat == constant.RelayFormatClaude {
+	if info.InboundFormat == translator.FormatClaude {
 		return convertClaudeRequest(requestBody, info)
 	}
 
 	// 非 OpenAI 格式先转换为 OpenAI
-	if info.InboundFormat != "" && info.InboundFormat != constant.RelayFormatOpenAI {
+	if info.InboundFormat != "" && info.InboundFormat != translator.FormatOpenAI {
 		c, err := openai.ConvertToOpenAI(requestBody, info)
 		if err != nil {
 			return nil, err
@@ -132,7 +134,7 @@ func (a *Adaptor) DoRequest(ctx context.Context, info *common.RelayInfo, request
 // DoResponse 处理上游响应。
 // Claude 入站委托 claude.Adaptor 原生直通；其他格式委托 openai.Adaptor。
 func (a *Adaptor) DoResponse(ctx context.Context, resp *http.Response, info *common.RelayInfo, writer http.ResponseWriter) (*common.Usage, error) {
-	if info.GetOriginalClientFormat() == constant.RelayFormatClaude {
+	if info.GetOriginalClientFormat() == translator.FormatClaude {
 		delegate := &claude.Adaptor{}
 		delegate.Init(info)
 		return delegate.DoResponse(ctx, resp, info, writer)

@@ -2,16 +2,23 @@
 
 ## Project Overview
 
-AI capability platform (LLM → MCP → Agent). GoFrame v2 monolith serving three HTTP ports. Current phase: LLM API key hosting with double-entry settlement.
+AI capability platform (LLM → MCP → Agent). GoFrame v2 monolith + Go node module. Current phase: LLM API key hosting with double-entry settlement.
 
 ## Architecture
 
 ```
 ai-platform/
-├── server/                    ← GoFrame monolith
+├── server/                    ← GoFrame monolith (main platform server)
 │   ├── main.go
+│   ├── cmd/
+│   │   ├── api/               ← main.go entry for all 3 servers (:8080,:8081,:8082)
+│   │   ├── node/              ← node daemon entry
+│   │   │   └── desktop/       ← Wails desktop app entry
+│   │   ├── recorder/          ← recorder sub-server entry
+│   │   ├── settlement/        ← settlement sub-server entry
+│   │   └── watcher/           ← watcher sub-server entry
 │   ├── internal/
-│   │   ├── boot/boot.go       ← starts 3 ghttp.Server instances
+│   │   ├── boot/boot.go       ← starts ghttp.Server instances
 │   │   ├── controller/
 │   │   │   ├── api/           ← :8080 handlers (identity, billing, wallet, payment, provider LLM)
 │   │   │   │   ├── admin/     ← :8082 handlers (user, billing, settlement, invoice, llm, payment)
@@ -19,14 +26,51 @@ ai-platform/
 │   │   │   └── gateway/       ← :8081 handlers (OpenAI-compatible data-plane)
 │   │   ├── logic/             ← business logic (one package per domain)
 │   │   ├── service/           ← interface definitions + accessors
-│   │   ├── model/dto/         ← request/response DTOs (8 files: billing, identity, invoice, llm, payment, settlement, wallet)
-│   │   └── middleware/        ← JWTAuth, APIKeyAuth, AdminTokenAuth, CORS, Recover, RequestID
-│   ├── migrations/            ← goose SQL migrations (7 files)
+│   │   ├── model/dto/         ← request/response DTOs (9 files: billing, developer, dto, identity, invoice, llm, payment, settlement, wallet)
+│   │   ├── middleware/        ← JWTAuth, APIKeyAuth, AdminTokenAuth, CORS, Recover, RequestID
+│   │   └── relay/             ← LLM relay engine (channel adaptors, scheduler, router)
+│   │       ├── channel/       ← per-provider adaptors (openai, claude, gemini, deepseek, ali, aws, baidu, etc.)
+│   │       │   ├── bridge/    ← wraps pkg/executor.Executor as common.Adaptor
+│   │       │   └── registry.go ← channel adaptor registry
+│   │       ├── common/        ← relay shared types
+│   │       ├── constant/      ← relay constants
+│   │       ├── dto/           ← relay DTOs
+│   │       ├── handler/       ← request handler
+│   │       ├── helper/        ← relay helpers
+│   │       ├── override/      ← model override logic
+│   │       └── scheduler/     ← request scheduler
+│   ├── migrations/            ← goose SQL migrations (17 files)
 │   ├── manifest/config/       ← GoFrame config YAML
 │   └── scripts/               ← smoke tests
+├── node/                      ← Go node module (independent go.work)
+│   ├── cli/                   ← CLI binary (depends on node/pkg)
+│   ├── desktop/               ← Wails desktop app (Go + React/Vite frontend)
+│   │   └── frontend/          ← React SPA (Vite, TypeScript)
+│   └── pkg/                   ← shared node packages
+│       ├── catalog/           ← LLM model catalog
+│       ├── channel/           ← LLM channel operations
+│       ├── combo/             ← combo/key management
+│       ├── db/                ← database layer
+│       ├── keychain/          ← keychain management
+│       ├── modelspec/         ← model specification
+│       ├── provider/          ← provider logic
+│       ├── router/            ← request routing
+│       ├── rtk/               ← runtime toolkit
+│       ├── server/            ← HTTP server
+│       ├── tunnel/            ← tunnel management
+│       ├── types/             ← shared types
+│       └── usagetracker/      ← usage tracking
+├── pkg/                       ← shared Go packages (cross-module)
+│   ├── executor/              ← LLM request executor
+│   ├── model/                 ← model types/definitions
+│   ├── provider/              ← provider interfaces
+│   └── translator/            ← model translation
 ├── app/
-│   ├── web/                   ← React SPA (Vite)
+│   ├── web/                   ← React SPA (Vite, TanStack Router)
 │   └── desktop/               ← Tauri desktop app
+├── api/
+│   ├── asset/v1/              ← asset API definitions
+│   └── user/v1/               ← user API definitions
 └── docs/design/               ← design documents
 ```
 
@@ -80,6 +124,13 @@ AdminTokenAuth checks `Authorization: Bearer <ADMIN_API_TOKEN>`. No JWT, no sess
 | gateway | logic/gateway/ | IGatewayAgent, IGatewayMcp | (no own tables) |
 | invoice | logic/invoice/ | IInvoice | invoices |
 | payment | logic/payment/ | IPayment | payment_channels, payment_orders |
+| developer | logic/developer/ | IDeveloper | developers, developers_reputation |
+| catalog | logic/catalog/ | — | (no own service interface yet) |
+| market | logic/market/ | — | (no own service interface yet) |
+| pricing | logic/pricing/ | — | (no own service interface yet) |
+| systemconfig | logic/systemconfig/ | — | system_configs |
+| usage | logic/usage/ | — | chat_logs |
+| admin | logic/admin/ | — | (no own tables) |
 
 ## Service Registration Pattern
 
@@ -108,7 +159,7 @@ All logic packages are blank-imported in `logic/logic.go` so `init()` runs on st
 
 PostgreSQL 16. Single database. Migrations managed by [Goose](https://github.com/pressly/goose).
 
-### Migrations (7 files)
+### Migrations (18 files)
 
 | File | Tables |
 |------|--------|
@@ -119,6 +170,17 @@ PostgreSQL 16. Single database. Migrations managed by [Goose](https://github.com
 | 0005_settlement.sql | settlement_records |
 | 0006_invoices.sql | invoices |
 | 0007_payment.sql | payment_channels, payment_orders |
+| 0008_provider_applications.sql | provider_applications |
+| 0009_source_type.sql | source_type support |
+| 0010_provider_settings.sql | provider_settings |
+| 0011_system_configs.sql | system_configs |
+| 0012_llm_gateway_fields.sql | llm gateway fields |
+| 0013_chat_logs.sql | chat_logs |
+| 0014_system_config_billing.sql | system_config billing fields |
+| 0015_developers.sql | developers |
+| 0016_system_configs_add_name.sql | system_configs name column |
+| 0017_developers_reputation.sql | developers_reputation |
+| 0018_settle_at.sql | adds settle_at column to settlement_records |
 
 ### Key Design Decisions
 
@@ -142,9 +204,11 @@ PostgreSQL 16. Single database. Migrations managed by [Goose](https://github.com
 
 ```
 provider (user, role=1)
-  → llm_channels        (protocol config, e.g. openai-compatible base_url)
-    → llm_model_keys      (encrypted upstream API key)
-      → llm_model_key_models (key ↔ model_spec binding, upstream_model_name, provider_share_bps)
+  → channel           (global channel dictionary, protocol config, e.g. Volcengine/OpenAI-compatible)
+    → developer         (descriptive model metadata — who developed the model, e.g. DeepSeek)
+      → model            (model base-info: context window, capabilities)
+        → model key       (provider's encrypted upstream API key, per-channel)
+          → virtual key    (user-facing sk-xxx key, access to all platform services)
 ```
 
 ```
@@ -153,6 +217,16 @@ admin (via :8082)
     → llm_model_specs     (create + review → active)
       → llm_model_prices   (per-capability pricing)
 ```
+
+Domain semantics:
+- **Provider** = API-key / resource owner (e.g., Zhang San buying a Volcengine key)
+- **Channel** = access platform/vendor (e.g., Volcengine, OpenAI, Anthropic). Global dictionary shared by all providers. Supports multiple protocols (OpenAI-compatible, Claude/Anthropic). `base_url` belongs to channel config, not overridable by model keys.
+- **Developer** = model creator (e.g., DeepSeek). Descriptive metadata only, unrelated to platform accounts.
+- **Model** = base model info (context window, supported parameters, capability metadata)
+- **Model Key** = provider-specific credentials + quotas on a channel (key-model binding table)
+- **Virtual Key** = user-facing API key
+
+Relay backend: `server/internal/relay/channel/` — per-provider adaptors (OpenAI, Claude, Gemini, DeepSeek, Ali, AWS, Baidu, Coze, Dify, Moonshot, etc.). Bridge adaptor wraps `pkg/executor.Executor` for shared executor implementations.
 
 ## LLM Settlement Flow
 
@@ -210,6 +284,13 @@ User request → POST /api/v1/payment/recharge (JWT, sk-xxx key)
 - **Response format for api gateway**: raw JSON objects (not `{code, message, data}` wrapped)
 - **Response format for admin :8082**: gfast-compatible `{code, message, data}` wrapper
 
+### Node Module Conventions
+
+- **Module path**: `ai-platform-node/cli`, `ai-platform-node/pkg` — separate `go.work` from server
+- **CLI** at `node/cli/main.go`, depends on `node/pkg/`
+- **Desktop** at `node/desktop/` — Wails app (Go backend + React/Vite frontend)
+- **Node pkg** shares `pkg/executor`, `pkg/model` from root via `ai-platform/pkg`
+
 ## Env Vars
 
 | Variable | Used By | Purpose |
@@ -228,6 +309,8 @@ User request → POST /api/v1/payment/recharge (JWT, sk-xxx key)
 ```bash
 cd server && go build ./...          # build check
 cd server && go run .                # start all 3 servers
-cd server && goose up                # run migrations (7 files)
+cd server && goose up                # run migrations (18 files)
 bash server/scripts/smoke-llm.sh    # LLM end-to-end smoke test
+cd node/cli && go build -o ../../bin/node-cli .   # build node CLI
+cd node/desktop && wails dev         # run desktop app in dev mode
 ```

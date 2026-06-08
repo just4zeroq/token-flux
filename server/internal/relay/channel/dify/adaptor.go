@@ -13,10 +13,11 @@ import (
 
 	"ai-platform/internal/relay/channel/openai"
 	"ai-platform/internal/relay/common"
-	"ai-platform/internal/relay/constant"
 	"ai-platform/internal/relay/dto"
 	"ai-platform/internal/relay/helper"
 	"ai-platform/internal/relay/override"
+	"ai-platform/internal/relay/constant"
+	"ai-platform/pkg/translator"
 )
 
 // Adaptor Dify 供应商适配器。
@@ -54,7 +55,7 @@ func (a *Adaptor) SetupRequestHeader(header http.Header, info *common.RelayInfo)
 // ConvertRequest 将 OpenAI Chat 请求转换为 Dify 请求格式
 func (a *Adaptor) ConvertRequest(ctx context.Context, info *common.RelayInfo, requestBody []byte) (io.Reader, error) {
 	// 非 OpenAI 格式先转换为 OpenAI
-	if info.InboundFormat != "" && info.InboundFormat != constant.RelayFormatOpenAI {
+	if info.InboundFormat != "" && info.InboundFormat != translator.FormatOpenAI {
 		converted, err := openai.ConvertToOpenAI(requestBody, info)
 		if err != nil {
 			return nil, err

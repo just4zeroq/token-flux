@@ -218,3 +218,53 @@ func SetProviderSetting(r *ghttp.Request) {
 	}
 	okMsg(r, "ok")
 }
+
+// ---- Channel-Model Binding ----
+
+func BindChannelModels(r *ghttp.Request) {
+	id := r.Get("id").Int64()
+	if id == 0 {
+		fail(r, "invalid channel id")
+		return
+	}
+	var in struct {
+		ModelIDs []int64 `json:"model_ids"`
+	}
+	if err := r.Parse(&in); err != nil {
+		fail(r, "invalid params: "+err.Error())
+		return
+	}
+	if err := service.LLM().BindChannelModels(r.Context(), id, in.ModelIDs); err != nil {
+		fail(r, err.Error())
+		return
+	}
+	okMsg(r, "bound")
+}
+
+func ListChannelModels(r *ghttp.Request) {
+	channelID := r.Get("id").Int64()
+	if channelID == 0 {
+		fail(r, "invalid channel id")
+		return
+	}
+	list, err := service.LLM().ListChannelModels(r.Context(), dto.LLMListChannelModelsIn{ChannelID: channelID})
+	if err != nil {
+		fail(r, err.Error())
+		return
+	}
+	ok(r, list)
+}
+
+func UnbindChannelModel(r *ghttp.Request) {
+	channelID := r.Get("channelId").Int64()
+	modelSpecID := r.Get("modelSpecId").Int64()
+	if channelID == 0 || modelSpecID == 0 {
+		fail(r, "invalid channel_id or model_spec_id")
+		return
+	}
+	if err := service.LLM().UnbindChannelModel(r.Context(), channelID, modelSpecID); err != nil {
+		fail(r, err.Error())
+		return
+	}
+	okMsg(r, "unbound")
+}

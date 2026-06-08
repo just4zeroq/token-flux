@@ -115,7 +115,7 @@ func StatsByModel(r *ghttp.Request) {
 		InnerJoin("llm_model_specs", "ms", "ur.model_spec_id = ms.id").
 		Where("ur.consumer_user_id", userID).
 		Where("ur.status", "success").
-		Group("ur.model_spec_id").
+		Group("ur.model_spec_id, ms.model_code, ms.model_name").
 		Fields(
 			"ms.model_code",
 			"ms.model_name",

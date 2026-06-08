@@ -1,5 +1,5 @@
 -- +goose Up
-CREATE TABLE developers (
+CREATE TABLE IF NOT EXISTS developers (
     id           BIGSERIAL PRIMARY KEY,
     name         VARCHAR(255) NOT NULL,
     description  TEXT NOT NULL DEFAULT '',
@@ -11,8 +11,8 @@ CREATE TABLE developers (
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE UNIQUE INDEX idx_developers_name ON developers(name);
-CREATE INDEX idx_developers_status_sort ON developers(status, sort_order);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_developers_name ON developers(name);
+CREATE INDEX IF NOT EXISTS idx_developers_status_sort ON developers(status, sort_order);
 
 -- Seed: populate with unique developer names from existing model specs.
 INSERT INTO developers (name, sort_order, status)

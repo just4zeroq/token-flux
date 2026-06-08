@@ -8,8 +8,6 @@ const BASE_ITEMS = [
 ]
 
 const PROVIDER_ITEMS = [
-  { key: 'channels', label: 'Channels', icon: '⇆' },
-  { key: 'provider-models', label: 'Models', icon: '▤' },
   { key: 'provider-keys', label: 'Model Keys', icon: '⚷' },
 ]
 

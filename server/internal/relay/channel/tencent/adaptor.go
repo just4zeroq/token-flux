@@ -12,8 +12,9 @@ import (
 
 	"ai-platform/internal/relay/channel/openai"
 	"ai-platform/internal/relay/common"
-	"ai-platform/internal/relay/constant"
 	"ai-platform/internal/relay/override"
+	"ai-platform/internal/relay/constant"
+	"ai-platform/pkg/translator"
 )
 
 const (
@@ -100,7 +101,7 @@ func (a *Adaptor) SetupRequestHeader(header http.Header, info *common.RelayInfo)
 // ConvertRequest 转换请求体。腾讯混元新版 API 兼容 OpenAI 格式，做模型名映射即可。
 func (a *Adaptor) ConvertRequest(ctx context.Context, info *common.RelayInfo, requestBody []byte) (io.Reader, error) {
 	// 非 OpenAI 格式先转换为 OpenAI
-	if info.InboundFormat != "" && info.InboundFormat != constant.RelayFormatOpenAI {
+	if info.InboundFormat != "" && info.InboundFormat != translator.FormatOpenAI {
 		converted, err := openai.ConvertToOpenAI(requestBody, info)
 		if err != nil {
 			return nil, err

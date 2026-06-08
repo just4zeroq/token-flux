@@ -1,104 +1,206 @@
-// Package translator provides pure format translation between LLM API formats.
-// No platform dependencies — used by both the server and local node.
+// Package translator defines protocol format identifiers, shared data types,
+// complete request/response structures, and universal format conversion.
+//
+// Supported formats:
+//   - OpenAI Chat Completions (openai)
+//   - Claude Messages (claude)
+//   - OpenAI Responses API (openai_responses)
+//
+// Convert() is the universal entry point for format conversion.
+// Conversion functions live in conv.go, types are in protocol-specific files.
 package translator
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
 
-// Format is an LLM API protocol format.
+// Format identifies an LLM API protocol format.
 type Format string
 
 const (
 	FormatOpenAI          Format = "openai"
-	FormatClaude           Format = "claude"
-	FormatGemini           Format = "gemini"
-	FormatOpenAIResponses  Format = "openai_responses"
+	FormatClaude          Format = "claude"
+	FormatGemini          Format = "gemini"
+	FormatOpenAIResponses Format = "openai_responses"
 )
 
-// Message is a canonical message used across all formats.
-type Message struct {
-	Role    string `json:"role"`
-	Content any    `json:"content,omitempty"`
-}
+// RelayMode identifies the upstream endpoint type.
+type RelayMode string
 
-// ---- Request: any format → OpenAI ----
+const (
+	RelayModeChatCompletions RelayMode = "chat-completions"
+	RelayModeClaudeMessages  RelayMode = "claude-messages"
+	RelayModeResponses       RelayMode = "responses"
+)
 
-// Normalize converts an inbound request body into OpenAI Chat Completions format.
-// Supported from: FormatClaude, FormatGemini, FormatOpenAIResponses, FormatOpenAI (passthrough).
-func Normalize(body []byte, from Format) ([]byte, error) {
-	switch from {
+// FormatRelayMode maps each Format to its default RelayMode.
+func (f Format) RelayMode() RelayMode {
+	switch f {
 	case FormatOpenAI:
-		return body, nil
+		return RelayModeChatCompletions
 	case FormatClaude:
-		return claudeToOpenAI(body)
-	case FormatGemini:
-		return geminiToOpenAI(body)
+		return RelayModeClaudeMessages
 	case FormatOpenAIResponses:
-		return responsesToOpenAI(body)
+		return RelayModeResponses
 	default:
-		return body, nil
+		return ""
 	}
 }
 
-// ---- Response: OpenAI → any format ----
-
-// Denormalize converts an OpenAI Chat Completions response into the target format.
-// Supported to: FormatClaude, FormatGemini, FormatOpenAIResponses, FormatOpenAI (passthrough).
-func Denormalize(body []byte, to Format, isStream bool) (Denormalizer, error) {
-	switch to {
+// EndpointPath returns the URL path for the given format.
+func (f Format) EndpointPath() string {
+	switch f {
 	case FormatOpenAI:
-		return &passthroughDenorm{}, nil
+		return "/v1/chat/completions"
 	case FormatClaude:
-		return newClaudeDenorm(isStream), nil
-	case FormatGemini:
-		return newGeminiDenorm(), nil
+		return "/v1/messages"
 	case FormatOpenAIResponses:
-		return newResponsesDenorm(), nil
+		return "/v1/responses"
 	default:
-		return &passthroughDenorm{}, nil
+		return ""
 	}
 }
 
-// Denormalizer converts an upstream OpenAI Chat Completions response stream/body
-// into client format. Implementations handle streaming vs non-streaming.
-type Denormalizer interface {
-	// Header returns the Content-Type for this response format.
-	Header() string
-	// ConvertBody converts a full non-streaming response body.
-	ConvertBody(body []byte) ([]byte, error)
-	// ConvertChunk converts a single SSE chunk from the upstream.
-	// Returns nil,nil if no output for this chunk (e.g. buffering).
-	ConvertChunk(chunk []byte) ([]byte, error)
-	// Finalize returns any buffered output at the end of a stream.
-	Finalize() ([]byte, error)
+// DetectFormatFromPath returns the format from a URL path.
+func DetectFormatFromPath(path string) (Format, bool) {
+	switch path {
+	case "/v1/chat/completions", "/chat/completions":
+		return FormatOpenAI, true
+	case "/v1/messages", "/messages":
+		return FormatClaude, true
+	case "/v1/responses", "/responses":
+		return FormatOpenAIResponses, true
+	}
+	return "", false
 }
 
-// passthroughDenorm is a no-op denormalizer for FormatOpenAI.
-type passthroughDenorm struct{}
-
-func (d *passthroughDenorm) Header() string                    { return "application/json" }
-func (d *passthroughDenorm) ConvertBody(b []byte) ([]byte, error) { return b, nil }
-func (d *passthroughDenorm) ConvertChunk(b []byte) ([]byte, error) { return b, nil }
-func (d *passthroughDenorm) Finalize() ([]byte, error)           { return nil, nil }
-
-// DetectFormat detects the format of a raw request body.
-func DetectFormat(body []byte) Format {
-	var obj map[string]json.RawMessage
-	if err := json.Unmarshal(body, &obj); err != nil {
-		return FormatOpenAI
-	}
-	if _, ok := obj["contents"]; ok {
-		return FormatGemini
-	}
-	if _, ok := obj["input"]; ok {
-		if _, ok := obj["messages"]; !ok {
-			return FormatOpenAIResponses
+// Detect detects format from path, falling back to body inspection.
+// Path takes priority when non-empty. Body detection is used as fallback.
+func Detect(body []byte, path string) Format {
+	if path != "" {
+		if f, ok := DetectFormatFromPath(path); ok {
+			return f
 		}
 	}
-	if _, ok := obj["anthropic_version"]; ok {
-		return FormatClaude
-	}
-	if _, ok := obj["system"]; ok {
-		return FormatClaude
-	}
-	return FormatOpenAI
+	return DetectFormat(body)
 }
+
+// Convert transforms a request or response body between protocol formats.
+// Supports direct conversion paths without intermediate format.
+//
+// Supported pairs (both request and response):
+//
+//	Claude ↔ OpenAI
+//	OpenAI ↔ Responses API
+//	Claude  ↔ Responses API
+//
+// Returns error for unsupported format pairs.
+func Convert(body []byte, from, to Format) ([]byte, error) {
+	if from == to {
+		return body, nil
+	}
+
+	// Try hub fallback for unsupported direct pairs:
+	// If the direct path isn't implemented, try via OpenAI intermediate.
+	result, err := convertDirect(body, from, to)
+	if err != nil {
+		// Hub fallback: via OpenAI
+		mid, hubErr := convertDirect(body, from, FormatOpenAI)
+		if hubErr != nil {
+			return nil, fmt.Errorf("translator: %s→%s: %w", from, to, err)
+		}
+		return convertDirect(mid, FormatOpenAI, to)
+	}
+	return result, nil
+}
+
+// convertDirect tries a direct format conversion without hub fallback.
+func convertDirect(body []byte, from, to Format) ([]byte, error) {
+	switch {
+	case from == FormatClaude && to == FormatOpenAI:
+		return claudeToOpenAI(body)
+	case from == FormatOpenAI && to == FormatClaude:
+		return openAIToClaude(body)
+	case from == FormatOpenAIResponses && to == FormatOpenAI:
+		return responsesToOpenAI(body)
+	case from == FormatOpenAI && to == FormatOpenAIResponses:
+		return openAIToResponses(body)
+	case from == FormatClaude && to == FormatOpenAIResponses:
+		return claudeToResponses(body)
+	case from == FormatOpenAIResponses && to == FormatClaude:
+		return responsesToClaude(body)
+	default:
+		return nil, fmt.Errorf("unsupported direct conversion %s → %s", from, to)
+	}
+}
+
+// DetectFormat inspects request body to determine which protocol format it uses.
+// Accepts raw JSON bytes, unmarshals internally.
+func DetectFormat(body []byte) Format {
+	var raw map[string]any
+	if err := json.Unmarshal(body, &raw); err != nil {
+		return FormatOpenAI // default on parse error
+	}
+	// OpenAI Responses: has "input" (array|string) and no "messages"
+	if input, ok := raw["input"]; ok && input != nil {
+		switch input.(type) {
+		case string, []any:
+			if _, hasMsgs := raw["messages"]; !hasMsgs {
+				return FormatOpenAIResponses
+			}
+		}
+	}
+
+	// Claude: has "messages" and "max_tokens" required
+	if _, ok := raw["messages"]; ok {
+		if _, hasSystem := raw["system"]; hasSystem {
+			return FormatClaude
+		}
+		if _, hasT := raw["temperature"]; hasT {
+			return FormatOpenAI
+		}
+		if model, ok := raw["model"].(string); ok {
+			for _, prefix := range []string{"claude-", "anthropic."} {
+				if len(model) >= len(prefix) && model[:len(prefix)] == prefix {
+					return FormatClaude
+				}
+			}
+		}
+		return FormatOpenAI
+	}
+
+	return FormatOpenAI // default fallback
+}
+
+// --- Shared Types ---
+
+// Usage captures basic token usage. Protocol-specific usage fields
+// are defined in each protocol's response type.
+type Usage struct {
+	PromptTokens     int `json:"prompt_tokens,omitempty"`
+	CompletionTokens int `json:"completion_tokens,omitempty"`
+	TotalTokens      int `json:"total_tokens,omitempty"`
+}
+
+// MessageRole constants.
+const (
+	RoleSystem    = "system"
+	RoleDeveloper = "developer"
+	RoleUser      = "user"
+	RoleAssistant = "assistant"
+	RoleTool      = "tool"
+)
+
+// FinishReason constants.
+const (
+	FinishReasonStop          = "stop"
+	FinishReasonLength        = "length"
+	FinishReasonToolCalls     = "tool_calls"
+	FinishReasonContentFilter = "content_filter"
+
+	ClaudeFinishEndTurn   = "end_turn"
+	ClaudeFinishMaxTokens = "max_tokens"
+	ClaudeFinishStopSeq   = "stop_sequence"
+	ClaudeFinishToolUse   = "tool_use"
+)

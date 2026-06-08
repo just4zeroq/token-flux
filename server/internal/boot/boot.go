@@ -2,6 +2,7 @@
 package boot
 
 import (
+	"context"
 	"github.com/gogf/gf/v2/frame/g"
 	"github.com/gogf/gf/v2/net/ghttp"
 	"github.com/gogf/gf/v2/os/gctx"
@@ -10,6 +11,7 @@ import (
 	"ai-platform/internal/controller/api/billing"
 	catalogapi "ai-platform/internal/controller/api/catalog"
 	"ai-platform/internal/controller/api/developer"
+	nodeapi "ai-platform/internal/controller/api/node"
 	usageapi "ai-platform/internal/controller/api/usage"
 	"ai-platform/internal/controller/api/identity"
 	llmapi "ai-platform/internal/controller/api/llm"
@@ -18,6 +20,12 @@ import (
 	"ai-platform/internal/controller/gateway"
 	"ai-platform/internal/middleware"
 	"ai-platform/internal/relay/handler"
+
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
+	"os"
+	"path/filepath"
 )
 
 // RunAPI starts the HTTP servers specified by `which`: "all", "api", "gateway", "admin".
@@ -120,12 +128,36 @@ func RunAPI(which string) {
 				v1.GET("/catalog/models/:code", catalogapi.GetModelDetail)
 				v1.GET("/catalog/providers", catalogapi.ListProviders)
 				v1.GET("/catalog/providers/:name/models", catalogapi.GetProviderModels)
+				v1.GET("/catalog/channels", catalogapi.ListChannels)
+				v1.GET("/catalog/channel-models", catalogapi.ListChannelModels)
 				v1.GET("/catalog/suppliers", catalogapi.ListSuppliers)
 				v1.GET("/catalog/suppliers/:username", catalogapi.GetSupplierModels)
+
+				// Node registration and WebSocket tunnel (public)
+				v1.POST("/nodes/register", nodeapi.Register)
+				v1.GET("/nodes/count", nodeapi.Count)
+
+				// Binary attestation (public, after registration)
+				v1.POST("/nodes/attest/challenge", nodeapi.AttestChallenge)
+				v1.POST("/nodes/attest/verify", nodeapi.AttestVerify)
 			})
+
+
 		})
 
-		if err := apiSrv.Start(); err != nil {
+		// WebSocket endpoint for nodes (outside middleware chain)
+		// WebSocket endpoint for nodes (outside middleware chain)
+		apiSrv.Group("/api/v1/nodes/ws", func(wsg *ghttp.RouterGroup) {
+			wsg.GET("/", nodeapi.WS)
+		})
+		// Data-plane WebSocket for node requests/responses.
+		apiSrv.Group("/api/v1/nodes/data", func(wsg *ghttp.RouterGroup) {
+			wsg.GET("/", nodeapi.DataWS)
+		})
+
+		// Load official node binaries for attestation.
+		loadNodeBinaries()
+	if err := apiSrv.Start(); err != nil {
 			g.Log().Fatalf(ctx, "api server start failed: %v", err)
 		}
 	}
@@ -238,4 +270,68 @@ func RunAPI(which string) {
 
 func health(r *ghttp.Request) {
 	r.Response.WriteJson(g.Map{"status": "ok"})
+}
+
+// loadNodeBinaries scans the attestation binary directory and registers
+// official node binaries for runtime attestation verification.
+// Directory is set via env NODE_BINARY_DIR (default: ./binaries/).
+// Each subdirectory is a version (e.g. v0.1.0) containing a binary file.
+// Set ATTEST_DISABLE=true env var to skip loading entirely.
+func loadNodeBinaries() {
+	if os.Getenv("ATTEST_DISABLE") == "true" {
+		g.Log().Info(context.Background(), "[attest] disabled via ATTEST_DISABLE=true")
+		return
+	}
+	dir := os.Getenv("NODE_BINARY_DIR")
+	if dir == "" {
+		dir = "./binaries"
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		g.Log().Infof(context.Background(), "[attest] no binary dir at %s, attestation disabled: %v", dir, err)
+		return
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		version := entry.Name()
+		binaryDir := filepath.Join(dir, version)
+
+		// Look for a binary file inside the version directory.
+		binaryEntries, err := os.ReadDir(binaryDir)
+		if err != nil {
+			continue
+		}
+		for _, be := range binaryEntries {
+			if be.IsDir() {
+				continue
+			}
+			binaryPath := filepath.Join(binaryDir, be.Name())
+
+			// Stream SHA256 without loading full binary.
+			f, err := os.Open(binaryPath)
+			if err != nil {
+				g.Log().Warningf(context.Background(), "[attest] open binary %s: %v", binaryPath, err)
+				continue
+			}
+			fi, _ := f.Stat()
+			h := sha256.New()
+			if _, err := io.Copy(h, f); err != nil {
+				f.Close()
+				g.Log().Warningf(context.Background(), "[attest] sha256 binary %s: %v", binaryPath, err)
+				continue
+			}
+			f.Close()
+			size := fi.Size()
+			sha256Hex := hex.EncodeToString(h.Sum(nil))
+
+			if err := nodeapi.LoadAttestationBinary(version, binaryPath, size, sha256Hex); err != nil {
+				g.Log().Warningf(context.Background(), "[attest] load binary %s: %v", binaryPath, err)
+				continue
+			}
+			// Only load one binary per version.
+			break
+		}
+	}
 }

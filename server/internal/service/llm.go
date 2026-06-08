@@ -12,6 +12,11 @@ type ILLM interface {
 	ReviewChannel(ctx context.Context, in dto.LLMReviewChannelIn) error
 	DeleteChannel(ctx context.Context, id int64) error
 
+	// Channel-Model binding
+	BindChannelModels(ctx context.Context, channelID int64, modelIDs []int64) error
+	ListChannelModels(ctx context.Context, in dto.LLMListChannelModelsIn) ([]*dto.LLMChannelModelInfo, error)
+	UnbindChannelModel(ctx context.Context, channelID, modelSpecID int64) error
+
 	CreateModelSpec(ctx context.Context, in dto.LLMCreateModelSpecIn) (*dto.LLMModelSpecInfo, error)
 	ListModelSpecs(ctx context.Context, in dto.LLMListModelSpecsIn) ([]*dto.LLMModelSpecInfo, int, error)
 	ReviewModelSpec(ctx context.Context, in dto.LLMReviewModelSpecIn) error

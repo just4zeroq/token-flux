@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"time"
 
-	"ai-platform/internal/relay/constant"
+	"ai-platform/pkg/translator"
 )
 
 // ChannelMeta 渠道元信息，由调度器填充
@@ -79,10 +79,10 @@ type RelayInfo struct {
 
 	// 入站格式：openai / claude / gemini / responses
 	// 决定适配器是否需要做格式转换
-	InboundFormat constant.RelayFormat
+	InboundFormat translator.Format
 
 	// ClientFormat 客户端原始请求格式（在格式转换前保存）
-	ClientFormat constant.RelayFormat
+	ClientFormat translator.Format
 
 	// RuntimeHeadersOverride 由 ParamOverride 中的 set_header/delete_header 操作
 	// 动态产生的 header 覆盖，优先级高于 ChannelSettings.HeaderOverride。
@@ -107,7 +107,7 @@ type RelayInfo struct {
 }
 
 // GetOriginalClientFormat 返回客户端原始请求格式
-func (info *RelayInfo) GetOriginalClientFormat() constant.RelayFormat {
+func (info *RelayInfo) GetOriginalClientFormat() translator.Format {
 	if info.ClientFormat != "" {
 		return info.ClientFormat
 	}

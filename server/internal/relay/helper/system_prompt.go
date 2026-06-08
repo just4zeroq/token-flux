@@ -4,7 +4,8 @@ import (
 	"encoding/json"
 
 	"ai-platform/internal/relay/common"
-	"ai-platform/internal/relay/constant"
+	"ai-platform/pkg/model"
+	"ai-platform/pkg/translator"
 )
 
 // InjectSystemPrompt 在 ConvertRequest 之后、ParamOverride 之前注入系统提示词
@@ -17,9 +18,9 @@ func InjectSystemPrompt(body []byte, info *common.RelayInfo) []byte {
 
 	nativeFormat := providerNativeFormat(info.ChannelMeta.ChannelType)
 	switch nativeFormat {
-	case constant.RelayFormatClaude:
+	case translator.FormatClaude:
 		return injectSystemPromptClaude(body, prompt, info.ChannelMeta.Settings.SystemPromptOverride)
-	case constant.RelayFormatGemini:
+	case translator.FormatGemini:
 		return injectSystemPromptGemini(body, prompt, info.ChannelMeta.Settings.SystemPromptOverride)
 	default:
 		return injectSystemPromptOpenAI(body, prompt, info.ChannelMeta.Settings.SystemPromptOverride)
@@ -206,14 +207,14 @@ func prependGeminiSystemInstruction(instrRaw json.RawMessage, prompt string) jso
 }
 
 // providerNativeFormat 返回供应商的原生请求格式（与 passthrough.go 中的逻辑一致）
-func providerNativeFormat(providerType int) constant.RelayFormat {
-	switch constant.ProviderType(providerType) {
-	case constant.ProviderClaude:
-		return constant.RelayFormatClaude
-	case constant.ProviderGemini:
-		return constant.RelayFormatGemini
+func providerNativeFormat(providerType int) translator.Format {
+	switch model.ProviderType(providerType) {
+	case model.ProviderClaude:
+		return translator.FormatClaude
+	case model.ProviderGemini:
+		return translator.FormatGemini
 	default:
-		return constant.RelayFormatOpenAI
+		return translator.FormatOpenAI
 	}
 }
 

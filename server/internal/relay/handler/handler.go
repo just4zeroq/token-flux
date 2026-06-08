@@ -19,6 +19,7 @@ import (
 	"ai-platform/internal/relay/constant"
 	"ai-platform/internal/relay/helper"
 	"ai-platform/internal/relay/scheduler"
+	"ai-platform/pkg/translator"
 
 	"github.com/gogf/gf/v2/errors/gerror"
 	"github.com/gogf/gf/v2/frame/g"
@@ -132,38 +133,44 @@ func Handle(req *RelayRequest) (resp *RelayResponse, err error) {
 		return nil, err
 	}
 
-	// 5. Load candidates (all protocols, not just openai-compatible).
+	// 5. Load candidates — platform channels + connected nodes.
 	dbCandidates, err := loadActiveCandidates(ctx, specID)
 	if err != nil {
 		return nil, err
 	}
-	if len(dbCandidates) == 0 {
+	chanCandidates := buildChannelCandidates(dbCandidates, inboundFormat)
+
+	nodeCandidates, err := loadNodeCandidates(ctx, resolvedCode)
+	if err != nil {
+		return nil, err
+	}
+
+	allCandidates := append(chanCandidates, nodeCandidates...)
+	if len(allCandidates) == 0 {
 		return nil, gerror.Newf("no available key for model %s", resolvedCode)
 	}
 
-	chanCandidates := buildChannelCandidates(dbCandidates, inboundFormat)
-
-	// 6. Check affinity — prefer same channel.
+	// 6. Check affinity — prefer same channel (nodes have ChannelID <= 0, skipped).
 	affinityChannel, hasAffinity := scheduler.GlobalAffinity.Get(req.RC.UserID, resolvedCode)
 	if hasAffinity {
-		preferred := make([]common.ChannelCandidate, 0, len(chanCandidates))
-		for _, c := range chanCandidates {
+		preferred := make([]common.ChannelCandidate, 0, len(allCandidates))
+		for _, c := range allCandidates {
 			if c.ChannelID == affinityChannel {
 				preferred = append(preferred, c)
 			}
 		}
 		if len(preferred) > 0 {
-			chanCandidates = preferred
+			allCandidates = preferred
 		}
 	}
 
 	// 7. Scheduler pick.
-	picked := scheduler.Select(chanCandidates)
+	picked := scheduler.Select(allCandidates)
 	if picked == nil {
 		return nil, gerror.New("no channel available after scheduling")
 	}
 
-	// 8. Determine protocol adaptor from channel's protocols_json.
+	// 8. Determine protocol adaptor.
 	protocolKey := picked.ProtocolKey
 	if protocolKey == "" {
 		return nil, gerror.Newf("channel %d (%s) has no supported protocol",
@@ -175,13 +182,18 @@ func Handle(req *RelayRequest) (resp *RelayResponse, err error) {
 		return nil, gerror.Newf("no adaptor registered for protocol %q", protocolKey)
 	}
 
-	// 9. Decrypt upstream key (AES-GCM).
-	apiKey, err := decryptUpstreamKey(ctx, picked.ApiKey)
-	if err != nil {
-		return nil, gerror.Wrapf(err, "decrypt key failed for model_key_id=%d", picked.ModelKeyID)
+	// 8b. For node protocol, ApiKey is wallet address (skip decryption).
+	var apiKey string
+	if protocolKey == "node" {
+		apiKey = picked.ApiKey
+	} else {
+		apiKey, err = decryptUpstreamKey(ctx, picked.ApiKey)
+		if err != nil {
+			return nil, gerror.Wrapf(err, "decrypt key failed for model_key_id=%d", picked.ModelKeyID)
+		}
 	}
 
-	// 10. Build RelayInfo.
+	// 9. Build RelayInfo.
 	info := &common.RelayInfo{
 		Context:   ctx,
 		UserID:    req.RC.UserID,
@@ -339,33 +351,39 @@ func HandleStream(w http.ResponseWriter, req *RelayRequest) (err error) {
 		return e
 	}
 
-	// 5. Load candidates.
+	// 5. Load candidates — platform channels + connected nodes.
 	dbCandidates, e := loadActiveCandidates(ctx, specID)
 	if e != nil {
 		return e
 	}
-	if len(dbCandidates) == 0 {
-		return gerror.Newf("no available key for model %s", resolvedCode)
+	chanCandidates := buildChannelCandidates(dbCandidates, inboundFormat)
+
+	nodeCandidates, e := loadNodeCandidates(ctx, resolvedCode)
+	if e != nil {
+		return e
 	}
 
-	chanCandidates := buildChannelCandidates(dbCandidates, inboundFormat)
+	allCandidates := append(chanCandidates, nodeCandidates...)
+	if len(allCandidates) == 0 {
+		return gerror.Newf("no available key for model %s", resolvedCode)
+	}
 
 	// 6. Affinity check.
 	affinityChannel, hasAffinity := scheduler.GlobalAffinity.Get(req.RC.UserID, resolvedCode)
 	if hasAffinity {
-		preferred := make([]common.ChannelCandidate, 0, len(chanCandidates))
-		for _, c := range chanCandidates {
+		preferred := make([]common.ChannelCandidate, 0, len(allCandidates))
+		for _, c := range allCandidates {
 			if c.ChannelID == affinityChannel {
 				preferred = append(preferred, c)
 			}
 		}
 		if len(preferred) > 0 {
-			chanCandidates = preferred
+			allCandidates = preferred
 		}
 	}
 
 	// 7. Scheduler pick.
-	picked := scheduler.Select(chanCandidates)
+	picked := scheduler.Select(allCandidates)
 	if picked == nil {
 		return gerror.New("no channel available after scheduling")
 	}
@@ -383,9 +401,14 @@ func HandleStream(w http.ResponseWriter, req *RelayRequest) (err error) {
 	}
 
 	// 9. Decrypt upstream key.
-	apiKey, e := decryptUpstreamKey(ctx, picked.ApiKey)
-	if e != nil {
-		return gerror.Wrapf(e, "decrypt key failed for model_key_id=%d", picked.ModelKeyID)
+	var apiKey string
+	if protocolKey == "node" {
+		apiKey = picked.ApiKey
+	} else {
+		apiKey, e = decryptUpstreamKey(ctx, picked.ApiKey)
+		if e != nil {
+			return gerror.Wrapf(e, "decrypt key failed for model_key_id=%d", picked.ModelKeyID)
+		}
 	}
 
 	// 10. Build RelayInfo.
@@ -480,7 +503,7 @@ func HandleStream(w http.ResponseWriter, req *RelayRequest) (err error) {
 }
 
 // detectInboundFormat determines the client's request format from body + path.
-func detectInboundFormat(body []byte, path string) constant.RelayFormat {
+func detectInboundFormat(body []byte, path string) translator.Format {
 	// Path takes precedence for unambiguous routes.
 	if fmt, ok := helper.DetectFormatFromPath(path); ok {
 		return fmt
@@ -525,10 +548,10 @@ func extractModel(body []byte) (string, error) {
 }
 
 // outputFormatValue wraps a RelayFormat so it can express "no value set".
-type outputFormatValue struct{ v constant.RelayFormat }
+type outputFormatValue struct{ v translator.Format }
 
 // Or returns v if set, otherwise fallback.
-func (of outputFormatValue) Or(fallback constant.RelayFormat) constant.RelayFormat {
+func (of outputFormatValue) Or(fallback translator.Format) translator.Format {
 	if of.v != "" {
 		return of.v
 	}
@@ -553,13 +576,13 @@ func extractOutputFormat(body []byte) outputFormatValue {
 	}
 	switch strings.ToLower(s) {
 	case "openai":
-		return outputFormatValue{constant.RelayFormatOpenAI}
+		return outputFormatValue{translator.FormatOpenAI}
 	case "claude":
-		return outputFormatValue{constant.RelayFormatClaude}
+		return outputFormatValue{translator.FormatClaude}
 	case "gemini":
-		return outputFormatValue{constant.RelayFormatGemini}
+		return outputFormatValue{translator.FormatGemini}
 	case "openai_responses":
-		return outputFormatValue{constant.RelayFormatOpenAIResponses}
+		return outputFormatValue{translator.FormatOpenAIResponses}
 	default:
 		return outputFormatValue{}
 	}
@@ -656,7 +679,7 @@ func loadActiveCandidates(ctx context.Context, modelSpecID int64) ([]candidateRo
 	return out, nil
 }
 
-func buildChannelCandidates(rows []candidateRow, inboundFormat constant.RelayFormat) []common.ChannelCandidate {
+func buildChannelCandidates(rows []candidateRow, inboundFormat translator.Format) []common.ChannelCandidate {
 	out := make([]common.ChannelCandidate, 0, len(rows))
 	for _, r := range rows {
 		score := healthScore(r.ConsecutiveFails)
@@ -693,6 +716,44 @@ func buildChannelCandidates(rows []candidateRow, inboundFormat constant.RelayFor
 		})
 	}
 	return out
+}
+
+func loadNodeCandidates(ctx context.Context, modelCode string) ([]common.ChannelCandidate, error) {
+	var rows []struct {
+		WalletAddr  string `json:"wallet_address"`
+		UserID      int64  `json:"user_id"`
+		KeyHash     string `json:"key_hash"`
+		InputPrice  int64  `json:"input_price"`
+		OutputPrice int64  `json:"output_price"`
+	}
+	err := g.DB().Model("node_models").Ctx(ctx).
+		Fields("wallet_address, user_id, key_hash, input_price, output_price").
+		Where("model_code", modelCode).
+		Where("status", "active").
+		Scan(&rows)
+	if err != nil || len(rows) == 0 {
+		return nil, nil
+	}
+	out := make([]common.ChannelCandidate, 0, len(rows))
+	for _, r := range rows {
+		if r.WalletAddr == "" {
+			continue
+		}
+		out = append(out, common.ChannelCandidate{
+			ChannelID:         -1,
+			ChannelName:       r.WalletAddr,
+			Priority:          0,
+			Weight:            1,
+			HealthScore:       100,
+			UpstreamModelName: r.KeyHash,
+			IsModelMapped:     r.KeyHash != "",
+			ApiKey:            r.WalletAddr,
+			ProviderUserID:    r.UserID,
+			ProtocolKey:       "node",
+			ChannelType:       0,
+		})
+	}
+	return out, nil
 }
 
 func healthScore(consecutiveFails int) float64 {

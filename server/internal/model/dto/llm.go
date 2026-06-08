@@ -39,6 +39,7 @@ type LLMCreateChannelIn struct {
 	Name            string          `json:"name" v:"required"`
 	Description     string          `json:"description"`
 	Protocols       []ProtocolEntry `json:"protocols" v:"required"`
+	ModelIDs        []int64         `json:"model_ids"` // bind these models on create
 	SourceType      string          `json:"-"`
 	CreatedByUserID int64           `json:"-"`
 }
@@ -57,6 +58,29 @@ type LLMReviewChannelIn struct {
 	Status     string `json:"status" v:"required|in:active,disabled,rejected"`
 	ReviewNote string `json:"review_note"`
 	ReviewerID int64  `json:"-"`
+}
+
+// ── Channel-Model Binding ──
+
+type LLMChannelModelInfo struct {
+	ID                int64     `json:"id"`
+	ChannelID         int64     `json:"channel_id"`
+	ModelSpecID       int64     `json:"model_spec_id"`
+	UpstreamModelName string    `json:"upstream_model_name"`
+	ModelName         string    `json:"model_name,omitempty"`
+	ModelCode         string    `json:"model_code,omitempty"`
+	DeveloperName     string    `json:"developer_name,omitempty"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
+}
+
+type LLMListChannelModelsIn struct {
+	ChannelID int64 `json:"channel_id"`
+}
+
+type LLMChannelModelsCount struct {
+	ChannelID int64 `json:"channel_id"`
+	ModelCount int  `json:"model_count"`
 }
 
 type LLMModelSpecInfo struct {

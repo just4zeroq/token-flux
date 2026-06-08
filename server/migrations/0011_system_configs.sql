@@ -1,6 +1,6 @@
 -- +goose Up
 -- +goose StatementBegin
-CREATE TABLE system_configs (
+CREATE TABLE IF  NOT EXISTS  system_configs (
     key         VARCHAR(128) PRIMARY KEY,
     value       TEXT NOT NULL DEFAULT '',
     description VARCHAR(512) NOT NULL DEFAULT '',
@@ -12,7 +12,8 @@ COMMENT ON COLUMN system_configs.key IS 'Config key, e.g. gateway.max_retries, g
 
 INSERT INTO system_configs (key, value, description) VALUES
     ('gateway.max_retries', '3', 'Maximum retry attempts for gateway upstream calls'),
-    ('gateway.rate_limit_default_qps', '60', 'Default rate limit QPS per API key');
+    ('gateway.rate_limit_default_qps', '60', 'Default rate limit QPS per API key')
+ON CONFLICT (key) DO NOTHING;
 -- +goose StatementEnd
 
 -- +goose Down

@@ -1,230 +1,185 @@
 package translator
 
-import (
-	"encoding/json"
-	"fmt"
+import "encoding/json"
+
+// ========== Claude Messages API 请求 ==========
+
+// ClaudeRequest Claude /v1/messages 请求
+// 参考 Claude协议文档 §3 请求体参数
+type ClaudeRequest struct {
+	Model         string           `json:"model"`
+	Messages      []ClaudeMessage  `json:"messages"`
+	MaxTokens     *uint            `json:"max_tokens,omitempty"`      // Claude 必填
+	System        any              `json:"system,omitempty"`          // string | []ClaudeContentBlock
+	Temperature   *float64         `json:"temperature,omitempty"`
+	TopP          *float64         `json:"top_p,omitempty"`
+	TopK          *int             `json:"top_k,omitempty"`
+	StopSequences []string         `json:"stop_sequences,omitempty"`
+	Stream        *bool            `json:"stream,omitempty"`
+	Tools         []ClaudeTool     `json:"tools,omitempty"`
+	ToolChoice    any              `json:"tool_choice,omitempty"`     // string | ClaudeToolChoice
+	Thinking      *ClaudeThinking  `json:"thinking,omitempty"`
+	Metadata      any              `json:"metadata,omitempty"`
+	ServiceTier   string           `json:"service_tier,omitempty"`    // "auto" | "standard_only"
+	Container     any              `json:"container,omitempty"`
+	McpServers    json.RawMessage  `json:"mcp_servers,omitempty"`
+}
+
+// ClaudeMessage Claude 消息
+type ClaudeMessage struct {
+	Role    string `json:"role"`    // "user" | "assistant"
+	Content any    `json:"content"` // string | []ClaudeContentBlock
+}
+
+// ClaudeContentBlock Claude 内容块（联合体 — 所有类型字段合并）
+type ClaudeContentBlock struct {
+	Type         string              `json:"type"`
+	Text         *string             `json:"text,omitempty"`
+	Thinking     *string             `json:"thinking,omitempty"`
+	Signature    string              `json:"signature,omitempty"`
+	ID           string              `json:"id,omitempty"`
+	Name         string              `json:"name,omitempty"`
+	Input        any                 `json:"input,omitempty"`
+	ToolUseID    string              `json:"tool_use_id,omitempty"`
+	Content      any                 `json:"content,omitempty"`
+	IsError      *bool               `json:"is_error,omitempty"`
+	Source       *ClaudeSource       `json:"source,omitempty"`
+	CacheControl *ClaudeCacheControl `json:"cache_control,omitempty"`
+	ServerName   string              `json:"server_name,omitempty"`
+}
+
+// ClaudeSource 多模态内容源
+type ClaudeSource struct {
+	Type      string `json:"type"`                // "base64" | "url"
+	MediaType string `json:"media_type,omitempty"` // "image/jpeg" | "image/png" | ...
+	Data      string `json:"data,omitempty"`
+	URL       string `json:"url,omitempty"`
+}
+
+// ClaudeCacheControl 缓存控制
+type ClaudeCacheControl struct {
+	Type string `json:"type"` // "ephemeral"
+}
+
+// ClaudeThinking 扩展思考配置
+type ClaudeThinking struct {
+	Type         string `json:"type"`          // "enabled" | "disabled"
+	BudgetTokens *int   `json:"budget_tokens,omitempty"`
+}
+
+// ClaudeTool Claude 工具定义
+type ClaudeTool struct {
+	Name         string              `json:"name"`
+	Description  string              `json:"description,omitempty"`
+	InputSchema  any                 `json:"input_schema,omitempty"`
+	Type         string              `json:"type,omitempty"`
+	CacheControl *ClaudeCacheControl `json:"cache_control,omitempty"`
+}
+
+// ClaudeToolChoice Claude 工具选择
+type ClaudeToolChoice struct {
+	Type                   string `json:"type"`                              // "auto" | "any" | "tool" | "none"
+	Name                   string `json:"name,omitempty"`
+	DisableParallelToolUse bool   `json:"disable_parallel_tool_use,omitempty"`
+}
+
+// ========== 非流式响应 ==========
+
+// ClaudeResponse Claude /v1/messages 响应（流式和非流式共用结构）
+type ClaudeResponse struct {
+	ID           string               `json:"id,omitempty"`
+	Type         string               `json:"type"`         // "message" | 流式事件类型
+	Role         string               `json:"role,omitempty"`
+	Content      []ClaudeContentBlock `json:"content,omitempty"`
+	Model        string               `json:"model,omitempty"`
+	StopReason   *string              `json:"stop_reason,omitempty"`
+	StopSequence *string              `json:"stop_sequence,omitempty"`
+	Usage        *ClaudeUsage         `json:"usage,omitempty"`
+	Container    any                  `json:"container,omitempty"`
+
+	// 流式事件字段
+	Index        *int                `json:"index,omitempty"`
+	ContentBlock *ClaudeContentBlock `json:"content_block,omitempty"`
+	Delta        *ClaudeDelta        `json:"delta,omitempty"`
+	Message      *ClaudeMessageInfo  `json:"message,omitempty"`
+	Error        any                 `json:"error,omitempty"`
+}
+
+// ClaudeDelta 流式增量
+type ClaudeDelta struct {
+	Type         string  `json:"type,omitempty"`    // "text_delta" | "input_json_delta" | "thinking_delta" | "signature_delta"
+	Text         *string `json:"text,omitempty"`
+	PartialJSON  *string `json:"partial_json,omitempty"`
+	Thinking     *string `json:"thinking,omitempty"`
+	Signature    string  `json:"signature,omitempty"`
+	StopReason   *string `json:"stop_reason,omitempty"`
+	StopSequence *string `json:"stop_sequence,omitempty"`
+}
+
+// ClaudeMessageInfo message_start 事件中的 message 对象
+type ClaudeMessageInfo struct {
+	ID           string               `json:"id"`
+	Type         string               `json:"type"`
+	Role         string               `json:"role"`
+	Content      []ClaudeContentBlock `json:"content"`
+	Model        string               `json:"model"`
+	StopReason   *string              `json:"stop_reason,omitempty"`
+	StopSequence *string              `json:"stop_sequence,omitempty"`
+	Usage        *ClaudeUsage         `json:"usage,omitempty"`
+}
+
+// ClaudeUsage Claude 用量
+type ClaudeUsage struct {
+	InputTokens              int              `json:"input_tokens"`
+	OutputTokens             int              `json:"output_tokens"`
+	CacheCreationInputTokens int              `json:"cache_creation_input_tokens,omitempty"`
+	CacheReadInputTokens     int              `json:"cache_read_input_tokens,omitempty"`
+	CacheCreation            *ClaudeCacheGen  `json:"cache_creation,omitempty"`
+	ServerToolUse            *ClaudeServerTool `json:"server_tool_use,omitempty"`
+	ServiceTier              string           `json:"service_tier,omitempty"`
+}
+
+// ClaudeCacheGen 缓存创建按 TTL 细分
+type ClaudeCacheGen struct {
+	Ephemeral5mInputTokens int `json:"ephemeral_5m_input_tokens,omitempty"`
+	Ephemeral1hInputTokens int `json:"ephemeral_1h_input_tokens,omitempty"`
+}
+
+// ClaudeServerTool 内置工具使用
+type ClaudeServerTool struct {
+	WebSearchRequests int `json:"web_search_requests,omitempty"`
+}
+
+// ========== SSE 流式事件类型常量 ==========
+
+const (
+	ClaudeSSEMessageStart     = "message_start"
+	ClaudeSSEContentBlockStart = "content_block_start"
+	ClaudeSSEContentBlockDelta = "content_block_delta"
+	ClaudeSSEContentBlockStop  = "content_block_stop"
+	ClaudeSSEMessageDelta     = "message_delta"
+	ClaudeSSEMessageStop      = "message_stop"
+	ClaudeSSEPing             = "ping"
+	ClaudeSSEError            = "error"
 )
 
-// ---- Claude → OpenAI request ----
-
-func claudeToOpenAI(body []byte) ([]byte, error) {
-	var cr claudeRequest
-	if err := json.Unmarshal(body, &cr); err != nil {
-		return nil, fmt.Errorf("parse claude request: %w", err)
-	}
-
-	messages := make([]map[string]any, 0)
-
-	// System prompt
-	if cr.System != "" {
-		messages = append(messages, map[string]any{"role": "system", "content": cr.System})
-	}
-
-	// Messages
-	for _, msg := range cr.Messages {
-		role := "user"
-		if msg.Role == "assistant" {
-			role = "assistant"
-		}
-
-		switch v := msg.Content.(type) {
-		case string:
-			messages = append(messages, map[string]any{"role": role, "content": v})
-		case []any:
-			// Multi-content block (text + image + tool_use)
-			parts := make([]map[string]any, 0)
-			for _, block := range v {
-				bm, _ := block.(map[string]any)
-				if bm == nil {
-					continue
-				}
-				switch bm["type"] {
-				case "text":
-					parts = append(parts, map[string]any{"type": "text", "text": bm["text"]})
-				case "image":
-					if src, ok := bm["source"].(map[string]any); ok {
-						parts = append(parts, map[string]any{
-							"type": "image_url",
-							"image_url": map[string]any{
-								"url": fmt.Sprintf("data:%s;base64,%s", src["media_type"], src["data"]),
-							},
-						})
-					}
-				case "tool_use":
-					messages = append(messages, map[string]any{
-						"role": "assistant",
-						"tool_calls": []map[string]any{{
-							"id":       bm["id"],
-							"type":     "function",
-							"function": map[string]any{"name": bm["name"], "arguments": fmt.Sprint(bm["input"])},
-						}},
-					})
-					continue
-				case "tool_result":
-					messages = append(messages, map[string]any{
-						"role":         "tool",
-						"tool_call_id": bm["tool_use_id"],
-						"content":      fmt.Sprint(bm["content"]),
-					})
-					continue
-				}
-			}
-			if len(parts) > 0 {
-				messages = append(messages, map[string]any{"role": role, "content": parts})
-			}
-		}
-	}
-
-	req := map[string]any{
-		"model":    cr.Model,
-		"messages": messages,
-	}
-	if cr.MaxTokens > 0 {
-		req["max_tokens"] = cr.MaxTokens
-	}
-	if cr.Temperature > 0 {
-		req["temperature"] = cr.Temperature
-	}
-	if cr.TopP > 0 {
-		req["top_p"] = cr.TopP
-	}
-
-	// Tools
-	if len(cr.Tools) > 0 {
-		tools := make([]map[string]any, 0)
-		for _, t := range cr.Tools {
-			tools = append(tools, map[string]any{
-				"type": "function",
-				"function": map[string]any{
-					"name":        t.Name,
-					"description": t.Description,
-					"parameters":  t.InputSchema,
-				},
-			})
-		}
-		req["tools"] = tools
-	}
-
-	return json.Marshal(req)
-}
-
-type claudeRequest struct {
-	Model       string         `json:"model"`
-	Messages    []claudeMessage `json:"messages"`
-	System      string         `json:"system,omitempty"`
-	MaxTokens   int            `json:"max_tokens,omitempty"`
-	Temperature float64        `json:"temperature,omitempty"`
-	TopP        float64        `json:"top_p,omitempty"`
-	Tools       []claudeTool    `json:"tools,omitempty"`
-}
-
-type claudeMessage struct {
-	Role    string `json:"role"`
-	Content any    `json:"content"`
-}
-
-type claudeTool struct {
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	InputSchema any    `json:"input_schema"`
-}
-
-// ---- OpenAI → Claude response ----
-
-type claudeDenorm struct {
-	isStream bool
-	id       int
-}
-
-func newClaudeDenorm(isStream bool) *claudeDenorm { return &claudeDenorm{isStream: isStream} }
-
-func (d *claudeDenorm) Header() string {
-	if d.isStream {
-		return "text/event-stream"
-	}
-	return "application/json"
-}
-
-func (d *claudeDenorm) ConvertBody(body []byte) ([]byte, error) {
-	var chat struct {
-		ID      string `json:"id"`
-		Model   string `json:"model"`
-		Choices []struct {
-			Message struct {
-				Content string `json:"content"`
-			} `json:"message"`
-		} `json:"choices"`
-		Usage struct {
-			InputTokens  int `json:"prompt_tokens"`
-			OutputTokens int `json:"completion_tokens"`
-		} `json:"usage"`
-	}
-	if err := json.Unmarshal(body, &chat); err != nil {
-		return body, nil
-	}
-	d.id++
-	resp := map[string]any{
-		"id":         fmt.Sprintf("msg_%s", chat.ID),
-		"type":       "message",
-		"role":       "assistant",
-		"model":      chat.Model,
-		"stop_reason": "end_turn",
-	}
-	content := []map[string]any{}
-	if len(chat.Choices) > 0 && chat.Choices[0].Message.Content != "" {
-		content = append(content, map[string]any{"type": "text", "text": chat.Choices[0].Message.Content})
-	}
-	resp["content"] = content
-	if chat.Usage.InputTokens > 0 || chat.Usage.OutputTokens > 0 {
-		resp["usage"] = map[string]any{
-			"input_tokens":  chat.Usage.InputTokens,
-			"output_tokens": chat.Usage.OutputTokens,
-		}
-	}
-	return json.Marshal(resp)
-}
-
-func (d *claudeDenorm) ConvertChunk(chunk []byte) ([]byte, error) {
-	// For simplicity in v1: check if it's an OpenAI SSE chunk with content.
-	// Strip "data: " prefix.
-	data := trimSSEPrefix(chunk)
-	if data == nil {
-		return nil, nil
-	}
-	var c struct {
-		Choices []struct {
-			Delta struct {
-				Content string `json:"content"`
-			} `json:"delta"`
-		} `json:"choices"`
-	}
-	if err := json.Unmarshal(data, &c); err != nil {
-		return nil, nil
-	}
-	if len(c.Choices) > 0 && c.Choices[0].Delta.Content != "" {
-		d.id++
-		event := fmt.Sprintf(
-			`event: content_block_delta
-data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":%q}}
-
-`, c.Choices[0].Delta.Content)
-		return []byte(event), nil
-	}
-	return nil, nil
-}
-
-func (d *claudeDenorm) Finalize() ([]byte, error) {
-	return []byte("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"), nil
-}
-
-func trimSSEPrefix(b []byte) []byte {
-	s := string(b)
-	if len(s) > 6 && s[:6] == "data: " {
-		r := []byte(s[6:])
-		if len(r) > 0 && string(r) == "[DONE]" {
-			return nil
-		}
-		return r
-	}
-	return b
-}
+// SSE event types for the Responses API streaming.
+const (
+	ResponsesSSEResponseCreated          = "response.created"
+	ResponsesSSEResponseInProgress       = "response.in_progress"
+	ResponsesSSEResponseCompleted        = "response.completed"
+	ResponsesSSEResponseFailed           = "response.failed"
+	ResponsesSSEResponseIncomplete       = "response.incomplete"
+	ResponsesSSEOutputItemAdded          = "response.output_item.added"
+	ResponsesSSEOutputItemDone           = "response.output_item.done"
+	ResponsesSSEContentPartAdded         = "response.content_part.added"
+	ResponsesSSEContentPartDone          = "response.content_part.done"
+	ResponsesSSETextDelta                = "response.output_text.delta"
+	ResponsesSSETextDone                = "response.output_text.done"
+	ResponsesSSERefusalDelta            = "response.refusal.delta"
+	ResponsesSSEFunctionCallArgumentsDelta = "response.function_call_arguments.delta"
+	ResponsesSSECodeInterpreterOutput    = "response.code_interpreter_call.output.delta"
+	ResponsesSSEWebSearchCompleted      = "response.web_search_call.completed"
+	ResponsesSSEFileSearchCallCompleted  = "response.file_search_call.completed"
+	ResponsesSSEComputerCallOutput       = "response.computer_call_output.delta"
+)

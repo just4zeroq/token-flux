@@ -8,21 +8,21 @@ import (
 	"time"
 
 	"ai-platform/internal/relay/common"
-	"ai-platform/internal/relay/constant"
 	"ai-platform/internal/relay/helper"
 	"ai-platform/pkg/translator"
+	pkgexecutor "ai-platform/pkg/executor"
 )
 
 // formatToTranslator maps platform relay format to shared translator.Format.
-var formatToTranslator = map[constant.RelayFormat]translator.Format{
-	constant.RelayFormatOpenAI:           translator.FormatOpenAI,
-	constant.RelayFormatClaude:           translator.FormatClaude,
-	constant.RelayFormatGemini:           translator.FormatGemini,
-	constant.RelayFormatOpenAIResponses:  translator.FormatOpenAIResponses,
+var formatToTranslator = map[translator.Format]translator.Format{
+	translator.FormatOpenAI:           translator.FormatOpenAI,
+	translator.FormatClaude:           translator.FormatClaude,
+	translator.FormatGemini:           translator.FormatGemini,
+	translator.FormatOpenAIResponses:  translator.FormatOpenAIResponses,
 }
 
 // handleTranslatedResponse processes an upstream OpenAI response and writes it
-// in the client's requested format using the shared translator.Denormalizer.
+// in the client's requested format using the shared pkg/executor.
 func (a *Adaptor) handleTranslatedResponse(ctx context.Context, resp *http.Response, info *common.RelayInfo, writer http.ResponseWriter) (*common.Usage, error) {
 	clientFormat := info.GetOriginalClientFormat()
 	tf := formatToTranslator[clientFormat]
@@ -35,9 +35,8 @@ func (a *Adaptor) handleTranslatedResponse(ctx context.Context, resp *http.Respo
 		return a.handleChatNonStreamResponse(ctx, resp, info, writer)
 	}
 
-	denorm, err := translator.Denormalize(nil, tf, info.IsStream)
-	if err != nil {
-		// Fall back to passthrough.
+	exec := pkgexecutor.GetByProvider("openai")
+	if exec == nil {
 		if info.IsStream {
 			return StreamHandler(ctx, resp, info, writer)
 		}
@@ -45,13 +44,13 @@ func (a *Adaptor) handleTranslatedResponse(ctx context.Context, resp *http.Respo
 	}
 
 	if info.IsStream {
-		return a.translateStreamResponse(ctx, resp, info, writer, denorm)
+		return a.translateStreamResponse(ctx, resp, info, writer, exec)
 	}
-	return a.translateNonStreamResponse(ctx, resp, info, writer, denorm)
+	return a.translateNonStreamResponse(ctx, resp, info, writer, exec)
 }
 
 // translateNonStreamResponse reads the full upstream body, translates it, and writes.
-func (a *Adaptor) translateNonStreamResponse(ctx context.Context, resp *http.Response, info *common.RelayInfo, writer http.ResponseWriter, denorm translator.Denormalizer) (*common.Usage, error) {
+func (a *Adaptor) translateNonStreamResponse(ctx context.Context, resp *http.Response, info *common.RelayInfo, writer http.ResponseWriter, exec pkgexecutor.Executor) (*common.Usage, error) {
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
@@ -66,7 +65,8 @@ func (a *Adaptor) translateNonStreamResponse(ctx context.Context, resp *http.Res
 		return &common.Usage{}, nil
 	}
 
-	translated, err := denorm.ConvertBody(body)
+	clientFormat := info.GetOriginalClientFormat()
+	translated, err := exec.ConvertResponse(body, translator.FormatOpenAI, clientFormat)
 	if err != nil {
 		writer.Header().Set("Content-Type", "application/json")
 		writer.WriteHeader(http.StatusOK)
@@ -74,7 +74,7 @@ func (a *Adaptor) translateNonStreamResponse(ctx context.Context, resp *http.Res
 		return &common.Usage{}, nil
 	}
 
-	writer.Header().Set("Content-Type", denorm.Header())
+	writer.Header().Set("Content-Type", "application/json")
 	writer.WriteHeader(http.StatusOK)
 	writer.Write(translated)
 
@@ -92,7 +92,7 @@ func (a *Adaptor) translateNonStreamResponse(ctx context.Context, resp *http.Res
 }
 
 // translateStreamResponse reads the upstream SSE stream, translates each chunk, and writes.
-func (a *Adaptor) translateStreamResponse(ctx context.Context, resp *http.Response, info *common.RelayInfo, writer http.ResponseWriter, denorm translator.Denormalizer) (*common.Usage, error) {
+func (a *Adaptor) translateStreamResponse(ctx context.Context, resp *http.Response, info *common.RelayInfo, writer http.ResponseWriter, exec pkgexecutor.Executor) (*common.Usage, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
@@ -101,6 +101,12 @@ func (a *Adaptor) translateStreamResponse(ctx context.Context, resp *http.Respon
 		writer.WriteHeader(resp.StatusCode)
 		writer.Write(body)
 		return &common.Usage{}, nil
+	}
+
+	clientFormat := info.GetOriginalClientFormat()
+	streamConv, err := exec.NewResponseStream(translator.FormatOpenAI, clientFormat)
+	if err != nil || streamConv == nil {
+		return StreamHandler(ctx, resp, info, writer)
 	}
 
 	helper.SetEventStreamHeaders(writer)
@@ -120,33 +126,28 @@ func (a *Adaptor) translateStreamResponse(ctx context.Context, resp *http.Respon
 		}
 
 		line := scanner.Bytes()
-		chunk, err := denorm.ConvertChunk(line)
-		if err != nil {
-			continue
-		}
-		if chunk != nil {
+		chunk, convErr := streamConv.Feed(line)
+		if convErr == nil && len(chunk) > 0 {
 			writer.Write(chunk)
 			if flusher, ok := writer.(http.Flusher); ok {
 				flusher.Flush()
 			}
 		}
-		// Check for usage at the end (last chunk)
-		if usage := helper.ExtractUsage(line); usage != nil {
-			totalUsage = common.Usage{
-				PromptTokens:           usage.PromptTokens,
-				CompletionTokens:       usage.CompletionTokens,
-				TotalTokens:            usage.TotalTokens,
-				PromptTokensDetails:    common.DtoTokenDetailsToCommon(usage.PromptTokensDetails),
-				CompletionTokenDetails: common.DtoTokenDetailsToCommon(usage.CompletionTokenDetails),
-			}
+	}
+
+	tail, _ := streamConv.End()
+	if len(tail) > 0 {
+		writer.Write(tail)
+		if flusher, ok := writer.(http.Flusher); ok {
+			flusher.Flush()
 		}
 	}
 
-	// Finalize the stream
-	if finalChunk, err := denorm.Finalize(); err == nil && finalChunk != nil {
-		writer.Write(finalChunk)
-		if flusher, ok := writer.(http.Flusher); ok {
-			flusher.Flush()
+	if u := streamConv.Usage(); u != nil {
+		totalUsage = common.Usage{
+			PromptTokens:     u.PromptTokens,
+			CompletionTokens: u.CompletionTokens,
+			TotalTokens:      u.TotalTokens,
 		}
 	}
 

@@ -17,6 +17,7 @@ import (
 	"ai-platform/internal/relay/override"
 
 	"ai-platform/pkg/translator"
+	pkgexecutor "ai-platform/pkg/executor"
 )
 
 // Adaptor OpenAI 供应商适配器
@@ -105,30 +106,18 @@ func (a *Adaptor) SetupRequestHeader(header http.Header, info *common.RelayInfo)
 	return nil
 }
 
-// relayFormatToTranslator maps platform relay format constants to pkg/translator.Format.
-func relayFormatToTranslator(f constant.RelayFormat) translator.Format {
-	switch f {
-	case constant.RelayFormatClaude:
-		return translator.FormatClaude
-	case constant.RelayFormatGemini:
-		return translator.FormatGemini
-	case constant.RelayFormatOpenAIResponses:
-		return translator.FormatOpenAIResponses
-	default:
-		return translator.FormatOpenAI
-	}
-}
-
 // convertInboundToOpenAI converts any inbound format body to OpenAI Chat Completions
-// using the shared pkg/translator package.
-func convertInboundToOpenAI(f constant.RelayFormat, body []byte) io.Reader {
-	tf := relayFormatToTranslator(f)
-	if tf == translator.FormatOpenAI {
+// using the shared pkg/executor.
+func convertInboundToOpenAI(f translator.Format, body []byte) io.Reader {
+	if f == "" || f == translator.FormatOpenAI {
 		return bytes.NewReader(body)
 	}
-	converted, err := translator.Normalize(body, tf)
+	exec := pkgexecutor.GetByProvider("openai")
+	if exec == nil {
+		return bytes.NewReader(body)
+	}
+	converted, err := exec.ConvertRequest(body, f, translator.FormatOpenAI)
 	if err != nil {
-		// Fall back to original body on conversion failure.
 		return bytes.NewReader(body)
 	}
 	return bytes.NewReader(converted)
@@ -223,7 +212,7 @@ func (a *Adaptor) DoResponse(ctx context.Context, resp *http.Response, info *com
 
 	// 根据客户端格式转换响应（非 OpenAI 格式走 shared translator）
 	switch clientFormat {
-	case constant.RelayFormatClaude, constant.RelayFormatGemini, constant.RelayFormatOpenAIResponses:
+	case translator.FormatClaude, translator.FormatGemini, translator.FormatOpenAIResponses:
 		return a.handleTranslatedResponse(ctx, resp, info, writer)
 	}
 

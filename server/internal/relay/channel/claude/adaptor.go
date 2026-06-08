@@ -11,8 +11,9 @@ import (
 
 	"ai-platform/internal/relay/common"
 
-	"ai-platform/internal/relay/constant"
 	"ai-platform/internal/relay/override"
+	"ai-platform/internal/relay/constant"
+	"ai-platform/pkg/translator"
 )
 
 // Adaptor Claude 供应商适配器
@@ -59,21 +60,21 @@ func (a *Adaptor) SetupRequestHeader(header http.Header, info *common.RelayInfo)
 func (a *Adaptor) ConvertRequest(ctx context.Context, info *common.RelayInfo, requestBody []byte) (io.Reader, error) {
 	var converted io.Reader
 	switch info.InboundFormat {
-	case constant.RelayFormatClaude:
+	case translator.FormatClaude:
 		converted = bytes.NewReader(requestBody)
-	case constant.RelayFormatOpenAI:
+	case translator.FormatOpenAI:
 		r, err := ConvertOpenAIToClaude(requestBody, info)
 		if err != nil {
 			return nil, err
 		}
 		converted = r
-	case constant.RelayFormatGemini:
+	case translator.FormatGemini:
 		r, err := ConvertGeminiToClaude(requestBody, info)
 		if err != nil {
 			return nil, err
 		}
 		converted = r
-	case constant.RelayFormatOpenAIResponses:
+	case translator.FormatOpenAIResponses:
 		r, err := ConvertResponsesToClaude(requestBody, info)
 		if err != nil {
 			return nil, err
@@ -195,9 +196,9 @@ func (a *Adaptor) DoResponse(ctx context.Context, resp *http.Response, info *com
 	clientFormat := info.GetOriginalClientFormat()
 
 	switch clientFormat {
-	case constant.RelayFormatClaude:
+	case translator.FormatClaude:
 		return a.handleClaudeNativeResponse(ctx, resp, info, writer)
-	case constant.RelayFormatOpenAI:
+	case translator.FormatOpenAI:
 		if info.IsStream {
 			return a.handleStreamToOpenAI(ctx, resp, info, writer)
 		}

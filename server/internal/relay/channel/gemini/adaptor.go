@@ -10,9 +10,10 @@ import (
 	"strings"
 
 	"ai-platform/internal/relay/common"
-	"ai-platform/internal/relay/constant"
 	"ai-platform/internal/relay/helper"
 	"ai-platform/internal/relay/override"
+	"ai-platform/internal/relay/constant"
+	"ai-platform/pkg/translator"
 )
 
 // Adaptor Gemini 供应商适配器
@@ -95,22 +96,22 @@ func (a *Adaptor) ConvertRequest(ctx context.Context, info *common.RelayInfo, re
 
 	var converted io.Reader
 	switch info.InboundFormat {
-	case constant.RelayFormatGemini:
+	case translator.FormatGemini:
 		cleaned := helper.StripStreamField(requestBody)
 		converted = bytes.NewReader(cleaned)
-	case constant.RelayFormatOpenAI:
+	case translator.FormatOpenAI:
 		r, err := ConvertOpenAIToGemini(requestBody, info)
 		if err != nil {
 			return nil, err
 		}
 		converted = r
-	case constant.RelayFormatClaude:
+	case translator.FormatClaude:
 		r, err := ConvertClaudeToGemini(requestBody, info)
 		if err != nil {
 			return nil, err
 		}
 		converted = r
-	case constant.RelayFormatOpenAIResponses:
+	case translator.FormatOpenAIResponses:
 		r, err := ConvertResponsesToGemini(requestBody, info)
 		if err != nil {
 			return nil, err
@@ -214,9 +215,9 @@ func (a *Adaptor) DoResponse(ctx context.Context, resp *http.Response, info *com
 	clientFormat := info.GetOriginalClientFormat()
 
 	switch clientFormat {
-	case constant.RelayFormatGemini:
+	case translator.FormatGemini:
 		return a.handleGeminiNativeResponse(ctx, resp, info, writer)
-	case constant.RelayFormatOpenAI:
+	case translator.FormatOpenAI:
 		if info.IsStream {
 			return a.handleStreamToOpenAI(ctx, resp, info, writer)
 		}

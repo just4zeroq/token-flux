@@ -123,6 +123,12 @@ func (s *sLLM) CreateChannel(ctx context.Context, in dto.LLMCreateChannelIn) (*d
 	if err != nil {
 		return nil, gerror.Wrap(err, "query created channel failed")
 	}
+	// Bind models if provided.
+	if len(in.ModelIDs) > 0 {
+		if err := s.BindChannelModels(ctx, id, in.ModelIDs); err != nil {
+			return nil, err
+		}
+	}
 	return row.toDTO(), nil
 }
 
@@ -209,3 +215,85 @@ func (s *sLLM) DeleteChannel(ctx context.Context, id int64) error {
 	}
 	return nil
 }
+// -- Channel-Model Binding --
+
+type channelModelRow struct {
+	ID                int64       `json:"id"`
+	ChannelID         int64       `json:"channel_id"`
+	ModelSpecID       int64       `json:"model_spec_id"`
+	UpstreamModelName string      `json:"upstream_model_name"`
+	CreatedAt         gtime.Time  `json:"created_at"`
+	UpdatedAt         gtime.Time  `json:"updated_at"`
+}
+
+func (r *channelModelRow) toDTO() *dto.LLMChannelModelInfo {
+	return &dto.LLMChannelModelInfo{
+		ID:                r.ID,
+		ChannelID:         r.ChannelID,
+		ModelSpecID:       r.ModelSpecID,
+		UpstreamModelName: r.UpstreamModelName,
+		CreatedAt:         r.CreatedAt.Time,
+		UpdatedAt:         r.UpdatedAt.Time,
+	}
+}
+
+func (s *sLLM) BindChannelModels(ctx context.Context, channelID int64, modelIDs []int64) error {
+	if len(modelIDs) == 0 {
+		return nil
+	}
+	// Verify channel exists.
+	var c channelRow
+	err := g.DB().Model("llm_channels").Ctx(ctx).Where("id", channelID).Scan(&c)
+	if err != nil {
+		return gerror.Wrap(err, "query channel failed")
+	}
+	if c.ID == 0 {
+		return gerror.New("channel not found")
+	}
+	for _, msid := range modelIDs {
+		// Verify model spec exists and is active.
+		var m struct{ ID int64 }
+		err := g.DB().Model("llm_model_specs").Ctx(ctx).Where("id", msid).Where("status", "active").Scan(&m)
+		if err != nil || m.ID == 0 {
+			continue
+		}
+		_, err = g.DB().Model("llm_channel_models").Ctx(ctx).Data(map[string]interface{}{
+			"channel_id":    channelID,
+			"model_spec_id": msid,
+		}).Insert()
+		if err != nil {
+			continue
+		}
+	}
+	return nil
+}
+
+func (s *sLLM) ListChannelModels(ctx context.Context, in dto.LLMListChannelModelsIn) ([]*dto.LLMChannelModelInfo, error) {
+	var rows []*channelModelRow
+	err := g.DB().Model("llm_channel_models", "cm").Ctx(ctx).
+		LeftJoin("llm_model_specs", "ms", "ms.id = cm.model_spec_id").
+		Where("cm.channel_id", in.ChannelID).
+		Fields("cm.*, ms.model_name, ms.model_code, ms.developer_name").
+		Order("cm.id ASC").
+		Scan(&rows)
+	if err != nil {
+		return nil, gerror.Wrap(err, "query channel models failed")
+	}
+	list := make([]*dto.LLMChannelModelInfo, len(rows))
+	for i, r := range rows {
+		list[i] = r.toDTO()
+	}
+	return list, nil
+}
+
+func (s *sLLM) UnbindChannelModel(ctx context.Context, channelID, modelSpecID int64) error {
+	_, err := g.DB().Model("llm_channel_models").Ctx(ctx).
+		Where("channel_id", channelID).
+		Where("model_spec_id", modelSpecID).
+		Delete()
+	if err != nil {
+		return gerror.Wrap(err, "delete channel model binding failed")
+	}
+	return nil
+}
+
